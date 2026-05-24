@@ -194,20 +194,19 @@ export const SearchReplace = Extension.create<{ caseSensitive: boolean }>({
   },
 
   addProseMirrorPlugins() {
-    const ext = this;
+    const storage = this.storage as SearchReplaceStorage;
     return [
       new Plugin({
         key: searchReplaceKey,
         props: {
           decorations(state) {
-            const s = ext.storage as SearchReplaceStorage;
             const max = state.doc.content.size;
-            const decos = s.results
+            const decos = storage.results
               .filter((r) => r.from >= 0 && r.to <= max)
               .map((r, i) =>
                 Decoration.inline(r.from, r.to, {
                   class:
-                    i === s.currentIndex
+                    i === storage.currentIndex
                       ? "search-result search-result-current"
                       : "search-result",
                 })

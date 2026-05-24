@@ -1,6 +1,8 @@
 "use client";
 
 import { useEditor, EditorContent } from "@tiptap/react";
+import { mergeAttributes, ResizableNodeView } from "@tiptap/core";
+import { NodeSelection } from "@tiptap/pm/state";
 import StarterKit from "@tiptap/starter-kit";
 import TextAlign from "@tiptap/extension-text-align";
 import {
@@ -23,12 +25,16 @@ import {
 } from "@tiptap/extension-table";
 import { Placeholder } from "@tiptap/extensions";
 import {
+  forwardRef,
   useEffect,
+  useImperativeHandle,
   useRef,
   useState,
   type ReactNode,
   type ChangeEvent,
+  type RefObject,
 } from "react";
+import { createPortal } from "react-dom";
 import {
   Undo2,
   Redo2,
@@ -68,6 +74,215 @@ import {
 } from "lucide-react";
 import { Frame } from "../extensions/Frame";
 import { SearchReplace } from "../extensions/SearchReplace";
+
+type ImageFit = "contain" | "cover" | "fill";
+type ImageAlign = "left" | "center" | "right";
+
+const EditableImage = Image.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      opacity: {
+        default: 100,
+        parseHTML: (element) =>
+          Number(element.getAttribute("data-image-opacity")) || 100,
+        renderHTML: (attributes) => ({
+          "data-image-opacity": attributes.opacity,
+        }),
+      },
+      fit: {
+        default: "contain",
+        parseHTML: (element) =>
+          (element.getAttribute("data-image-fit") as ImageFit | null) ??
+          "contain",
+        renderHTML: (attributes) => ({
+          "data-image-fit": attributes.fit,
+        }),
+      },
+      align: {
+        default: "left",
+        parseHTML: (element) =>
+          (element.getAttribute("data-image-align") as ImageAlign | null) ??
+          "left",
+        renderHTML: (attributes) => ({
+          "data-image-align": attributes.align,
+        }),
+      },
+      cropX: {
+        default: 50,
+        parseHTML: (element) =>
+          Number(element.getAttribute("data-image-crop-x")) || 50,
+        renderHTML: (attributes) => ({
+          "data-image-crop-x": attributes.cropX,
+        }),
+      },
+      cropY: {
+        default: 50,
+        parseHTML: (element) =>
+          Number(element.getAttribute("data-image-crop-y")) || 50,
+        renderHTML: (attributes) => ({
+          "data-image-crop-y": attributes.cropY,
+        }),
+      },
+      radius: {
+        default: 6,
+        parseHTML: (element) =>
+          Number(element.getAttribute("data-image-radius")) || 6,
+        renderHTML: (attributes) => ({
+          "data-image-radius": attributes.radius,
+        }),
+      },
+      rotate: {
+        default: 0,
+        parseHTML: (element) =>
+          Number(element.getAttribute("data-image-rotate")) || 0,
+        renderHTML: (attributes) => ({
+          "data-image-rotate": attributes.rotate,
+        }),
+      },
+    };
+  },
+
+  renderHTML({ node, HTMLAttributes }) {
+    const {
+      width,
+      height,
+      opacity,
+      fit,
+      cropX,
+      cropY,
+      radius,
+      rotate,
+      align,
+    } = node.attrs;
+    const { style, ...attrs } = HTMLAttributes;
+    const styles = [
+      style,
+      "display: block",
+      width ? `width: ${width}px` : null,
+      height ? `height: ${height}px` : null,
+      `opacity: ${Number(opacity) / 100}`,
+      `object-fit: ${fit}`,
+      `object-position: ${cropX}% ${cropY}%`,
+      `border-radius: ${radius}px`,
+      rotate ? `transform: rotate(${rotate}deg)` : null,
+      align === "center" ? "margin-left: auto" : null,
+      align === "center" ? "margin-right: auto" : null,
+      align === "right" ? "margin-left: auto" : null,
+      align === "right" ? "margin-right: 0" : null,
+    ].filter(Boolean);
+
+    return [
+      "img",
+      mergeAttributes(this.options.HTMLAttributes, attrs, {
+        style: styles.join("; "),
+      }),
+    ];
+  },
+
+  addNodeView() {
+    return ({ node, getPos, HTMLAttributes, editor }) => {
+      const el = document.createElement("img");
+      let container: HTMLElement | null = null;
+
+      const applyAttributes = (attrs: Record<string, unknown>) => {
+        Object.entries(attrs).forEach(([key, value]) => {
+          if (
+            value == null ||
+            key === "width" ||
+            key === "height" ||
+            key === "style"
+          ) {
+            return;
+          }
+          el.setAttribute(key, String(value));
+        });
+
+        const width = Number(attrs.width) || null;
+        const height = Number(attrs.height) || null;
+        const opacity = Number(attrs.opacity) || 100;
+        const fit = String(attrs.fit ?? "contain");
+        const cropX = Number(attrs.cropX) || 50;
+        const cropY = Number(attrs.cropY) || 50;
+        const radius = Number(attrs.radius) || 6;
+        const rotate = Number(attrs.rotate) || 0;
+        const align = String(attrs.align ?? "left") as ImageAlign;
+
+        el.style.display = "block";
+        el.style.maxWidth = "100%";
+        el.style.width = width ? `${width}px` : "";
+        el.style.height = height ? `${height}px` : "";
+        el.style.opacity = String(opacity / 100);
+        el.style.objectFit = fit;
+        el.style.objectPosition = `${cropX}% ${cropY}%`;
+        el.style.borderRadius = `${radius}px`;
+        el.style.transform = rotate ? `rotate(${rotate}deg)` : "";
+        el.style.marginLeft = align === "center" || align === "right" ? "auto" : "";
+        el.style.marginRight = align === "center" ? "auto" : "";
+        if (container) {
+          container.style.justifyContent =
+            align === "center"
+              ? "center"
+              : align === "right"
+              ? "flex-end"
+              : "flex-start";
+        }
+      };
+
+      applyAttributes({ ...HTMLAttributes, ...node.attrs });
+
+      const nodeView = new ResizableNodeView({
+        element: el,
+        editor,
+        node,
+        getPos,
+        onResize: (width, height) => {
+          el.style.width = `${width}px`;
+          el.style.height = `${height}px`;
+        },
+        onCommit: (width, height) => {
+          const pos = getPos();
+          if (pos === undefined) return;
+          editor
+            .chain()
+            .setNodeSelection(pos)
+            .updateAttributes(this.name, { width, height })
+            .run();
+        },
+        onUpdate: (updatedNode) => {
+          if (updatedNode.type !== node.type) return false;
+          applyAttributes({ ...HTMLAttributes, ...updatedNode.attrs });
+          return true;
+        },
+        options: {
+          directions: [
+            "top",
+            "right",
+            "bottom",
+            "left",
+            "top-right",
+            "top-left",
+            "bottom-right",
+            "bottom-left",
+          ],
+          className: {
+            container: "doc-image-resize-container",
+            wrapper: "doc-image-resize-wrapper",
+            handle: "doc-image-resize-handle",
+            resizing: "doc-image-resizing",
+          },
+          min: { width: 80, height: 60 },
+          preserveAspectRatio: false,
+        },
+      });
+
+      container = nodeView.dom as HTMLElement;
+      applyAttributes({ ...HTMLAttributes, ...node.attrs });
+
+      return nodeView;
+    };
+  },
+});
 
 /** Compact icon button. */
 function TBtn({
@@ -145,6 +360,58 @@ function GroupDivider() {
   return <span className="mx-1 w-px self-stretch bg-gray-200" />;
 }
 
+/**
+ * Renders a popover in a portal anchored under `anchorRef`, so it floats above
+ * everything and isn't clipped by the toolbar's horizontal-scroll overflow.
+ */
+function PortalMenu({
+  open,
+  onClose,
+  anchorRef,
+  align = "left",
+  children,
+}: {
+  open: boolean;
+  onClose: () => void;
+  anchorRef: RefObject<HTMLElement | null>;
+  align?: "left" | "right";
+  children: ReactNode;
+}) {
+  const [coords, setCoords] = useState<{
+    top: number;
+    left?: number;
+    right?: number;
+  } | null>(null);
+
+  useEffect(() => {
+    if (open && anchorRef.current) {
+      const r = anchorRef.current.getBoundingClientRect();
+      setCoords(
+        align === "right"
+          ? { top: r.bottom + 4, right: window.innerWidth - r.right }
+          : { top: r.bottom + 4, left: r.left }
+      );
+    } else {
+      setCoords(null);
+    }
+  }, [open, align, anchorRef]);
+
+  if (!open || !coords) return null;
+  return createPortal(
+    <>
+      <div className="fixed inset-0 z-[90]" onMouseDown={onClose} />
+      <div
+        className="fixed z-[91]"
+        style={coords}
+        onMouseDown={(e) => e.preventDefault()}
+      >
+        {children}
+      </div>
+    </>,
+    document.body
+  );
+}
+
 /** A bordered control that opens a small popover menu below it. */
 function IconDropdown({
   title,
@@ -156,9 +423,11 @@ function IconDropdown({
   children: (close: () => void) => ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const btnRef = useRef<HTMLButtonElement>(null);
   return (
-    <div className="relative">
+    <>
       <button
+        ref={btnRef}
         type="button"
         title={title}
         onMouseDown={(e) => e.preventDefault()}
@@ -168,15 +437,12 @@ function IconDropdown({
         {icon}
         <ChevronDown size={13} />
       </button>
-      {open && (
-        <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 z-20 mt-1 rounded-md border border-gray-200 bg-white p-1 shadow-lg">
-            {children(() => setOpen(false))}
-          </div>
-        </>
-      )}
-    </div>
+      <PortalMenu open={open} onClose={() => setOpen(false)} anchorRef={btnRef}>
+        <div className="rounded-md border border-gray-200 bg-white p-1 shadow-lg">
+          {children(() => setOpen(false))}
+        </div>
+      </PortalMenu>
+    </>
   );
 }
 
@@ -192,7 +458,7 @@ function TableGridPicker({
   const MAX_COLS = 10;
   const [hover, setHover] = useState({ rows: 0, cols: 0 });
   return (
-    <div className="absolute left-0 z-20 mt-1 rounded-lg border border-gray-200 bg-white p-3 shadow-lg">
+    <div className="rounded-lg border border-gray-200 bg-white p-3 shadow-lg">
       <div
         className="grid gap-1"
         style={{ gridTemplateColumns: `repeat(${MAX_COLS}, 1rem)` }}
@@ -227,18 +493,88 @@ function TableGridPicker({
   );
 }
 
-export default function Editor() {
+export type EditorHandle = {
+  replaceSelectionOrCurrentBlock: (text: string) => void;
+  replaceRange: (range: { from: number; to: number }, text: string) => void;
+  applyAssistantActions: (actions: AssistantEditorAction[]) => void;
+};
+
+export type AssistantEditorAction =
+  | { type: "insert_table"; rows: string[][]; position?: "cursor" | "end" }
+  | { type: "highlight_target"; color?: string }
+  | { type: "highlight_matches"; terms: string[]; color?: string }
+  | { type: "format_target"; marks: Array<"bold" | "italic"> }
+  | { type: "set_heading"; level: 1 | 2 | 3 }
+  | { type: "insert_text"; text: string; position?: "cursor" | "end" };
+
+type EditorProps = {
+  onDocumentChange?: (document: {
+    text: string;
+    html: string;
+    selectionText: string;
+    currentBlockText: string;
+    targetRange: { from: number; to: number } | null;
+  }) => void;
+};
+
+function textToParagraphContent(text: string) {
+  return text
+    .trim()
+    .split(/\n{2,}/)
+    .map((paragraph) => ({
+      type: "paragraph",
+      content: paragraph.split("\n").flatMap((line, index) => {
+        const content: Array<{ type: string; text?: string }> = [];
+        if (index > 0) content.push({ type: "hardBreak" });
+        if (line) content.push({ type: "text", text: line });
+        return content;
+      }),
+    }));
+}
+
+function tableContent(rows: string[][]) {
+  return {
+    type: "table",
+    content: rows.map((row) => ({
+      type: "tableRow",
+      content: row.map((cell) => ({
+        type: "tableCell",
+        content: [
+          {
+            type: "paragraph",
+            content: cell ? [{ type: "text", text: cell }] : undefined,
+          },
+        ],
+      })),
+    })),
+  };
+}
+
+const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
+  onDocumentChange,
+}, ref) {
   const [showOutline, setShowOutline] = useState(true);
   const [showFind, setShowFind] = useState(false);
   const [showExport, setShowExport] = useState(false);
   const [showTablePicker, setShowTablePicker] = useState(false);
   const [showInsert, setShowInsert] = useState(false);
+  const [imageMenu, setImageMenu] = useState<{ x: number; y: number } | null>(
+    null
+  );
+  const [imageToolbar, setImageToolbar] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
   const [listening, setListening] = useState(false);
   const [, setTick] = useState(0); // force re-render on editor changes
 
   const recognitionRef = useRef<unknown>(null);
   const findInputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
+  const tableBtnRef = useRef<HTMLDivElement>(null);
+  const insertBtnRef = useRef<HTMLDivElement>(null);
+  const exportBtnRef = useRef<HTMLDivElement>(null);
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -258,7 +594,7 @@ export default function Editor() {
       Subscript,
       TaskList,
       TaskItem.configure({ nested: true }),
-      Image,
+      EditableImage.configure({ allowBase64: true }),
       Table.configure({ resizable: true }),
       TableRow,
       TableHeader,
@@ -273,17 +609,228 @@ export default function Editor() {
         class:
           "editor-content min-h-[60vh] text-[17px] leading-8 text-gray-800 outline-none",
       },
+      handleDOMEvents: {
+        contextmenu: (view, event) => {
+          const target = event.target as HTMLElement | null;
+          const image = target?.closest(".editor-content img");
+          if (!image) {
+            setImageMenu(null);
+            return false;
+          }
+
+          event.preventDefault();
+          const pos = view.posAtDOM(image, 0);
+          view.dispatch(
+            view.state.tr.setSelection(
+              NodeSelection.create(view.state.doc, pos)
+            )
+          );
+          setImageMenu({ x: event.clientX, y: event.clientY });
+          return true;
+        },
+      },
     },
   });
 
+  useImperativeHandle(
+    ref,
+    () => ({
+      replaceRange(range: { from: number; to: number }, text: string) {
+        if (!editor) return;
+        const replacement = text.trim();
+        if (!replacement) return;
+
+        editor
+          .chain()
+          .focus()
+          .insertContentAt(range, textToParagraphContent(replacement))
+          .run();
+      },
+      applyAssistantActions(actions: AssistantEditorAction[]) {
+        if (!editor) return;
+
+        for (const action of actions) {
+          const { selection } = editor.state;
+          const targetRange =
+            selection.empty && selection.$from.depth > 0
+              ? {
+                  from: selection.$from.before(selection.$from.depth),
+                  to: selection.$from.after(selection.$from.depth),
+                }
+              : selection.empty
+              ? null
+              : { from: selection.from, to: selection.to };
+          const insertAt =
+            action.type === "insert_table" || action.type === "insert_text"
+              ? action.position === "end"
+                ? editor.state.doc.content.size
+                : selection.to
+              : selection.to;
+
+          if (action.type === "insert_table" && action.rows.length) {
+            editor
+              .chain()
+              .focus()
+              .insertContentAt(insertAt, tableContent(action.rows))
+              .run();
+            continue;
+          }
+
+          if (action.type === "insert_text" && action.text.trim()) {
+            editor
+              .chain()
+              .focus()
+              .insertContentAt(insertAt, textToParagraphContent(action.text))
+              .run();
+            continue;
+          }
+
+          if (action.type === "highlight_matches") {
+            const markType = editor.schema.marks.highlight;
+            if (!markType) continue;
+
+            const terms = action.terms
+              .map((term) => term.trim())
+              .filter(Boolean)
+              .sort((a, b) => b.length - a.length);
+            if (!terms.length) continue;
+
+            let tr = editor.state.tr;
+            let changed = false;
+            editor.state.doc.descendants((node, pos) => {
+              if (!node.isText || !node.text) return;
+
+              const text = node.text;
+              const lowerText = text.toLowerCase();
+              for (const term of terms) {
+                const lowerTerm = term.toLowerCase();
+                let index = lowerText.indexOf(lowerTerm);
+                while (index !== -1) {
+                  tr = tr.addMark(
+                    pos + index,
+                    pos + index + term.length,
+                    markType.create({ color: action.color ?? "#fef08a" })
+                  );
+                  changed = true;
+                  index = lowerText.indexOf(lowerTerm, index + lowerTerm.length);
+                }
+              }
+            });
+
+            if (changed) {
+              editor.view.dispatch(tr);
+              editor.commands.focus();
+            }
+            continue;
+          }
+
+          if (!targetRange) continue;
+
+          if (action.type === "highlight_target") {
+            editor
+              .chain()
+              .focus()
+              .setTextSelection(targetRange)
+              .setHighlight({ color: action.color ?? "#fef08a" })
+              .run();
+            continue;
+          }
+
+          if (action.type === "format_target") {
+            let chain = editor.chain().focus().setTextSelection(targetRange);
+            if (action.marks.includes("bold")) chain = chain.toggleBold();
+            if (action.marks.includes("italic")) chain = chain.toggleItalic();
+            chain.run();
+            continue;
+          }
+
+          if (action.type === "set_heading") {
+            editor
+              .chain()
+              .focus()
+              .setTextSelection(targetRange)
+              .toggleHeading({ level: action.level })
+              .run();
+          }
+        }
+      },
+      replaceSelectionOrCurrentBlock(text: string) {
+        if (!editor) return;
+        const replacement = text.trim();
+        if (!replacement) return;
+
+        const { selection } = editor.state;
+        let from = selection.from;
+        let to = selection.to;
+
+        if (selection.empty && selection.$from.depth > 0) {
+          from = selection.$from.before(selection.$from.depth);
+          to = selection.$from.after(selection.$from.depth);
+        }
+
+        editor
+          .chain()
+          .focus()
+          .insertContentAt({ from, to }, textToParagraphContent(replacement))
+          .run();
+      },
+    }),
+    [editor]
+  );
+
   useEffect(() => {
     if (!editor) return;
-    const update = () => setTick((t) => t + 1);
+    const update = () => {
+      setTick((t) => t + 1);
+
+      const { selection } = editor.state;
+      const selectionText = selection.empty
+        ? ""
+        : editor.state.doc.textBetween(selection.from, selection.to, "\n");
+      const currentBlockText =
+        selection.empty && selection.$from.depth > 0
+          ? selection.$from.parent.textContent
+          : "";
+      const targetRange =
+        selection.empty && selection.$from.depth > 0
+          ? {
+              from: selection.$from.before(selection.$from.depth),
+              to: selection.$from.after(selection.$from.depth),
+            }
+          : selection.empty
+          ? null
+          : { from: selection.from, to: selection.to };
+      onDocumentChange?.({
+        text: editor.getText(),
+        html: editor.getHTML(),
+        selectionText,
+        currentBlockText,
+        targetRange,
+      });
+
+      if (
+        selection instanceof NodeSelection &&
+        selection.node.type.name === "image"
+      ) {
+        const dom = editor.view.nodeDOM(selection.from);
+        if (dom instanceof HTMLElement) {
+          const rect = dom.getBoundingClientRect();
+          setImageToolbar({
+            x: rect.left + rect.width / 2,
+            y: Math.max(8, rect.top - 46),
+          });
+          return;
+        }
+      }
+
+      setImageToolbar(null);
+      setImageMenu(null);
+    };
     editor.on("transaction", update);
     return () => {
       editor.off("transaction", update);
     };
-  }, [editor]);
+  }, [editor, onDocumentChange]);
 
   // ── Outline from headings ──────────────────────────────
   const headings: { level: number; text: string; pos: number }[] = [];
@@ -312,10 +859,24 @@ export default function Editor() {
     editor.chain().focus().extendMarkRange("link").setLink({ href: url }).run();
   }
 
-  function addImage() {
+  function openImagePicker() {
+    imageInputRef.current?.click();
+  }
+
+  function addImageFromFile(e: ChangeEvent<HTMLInputElement>) {
     if (!editor) return;
-    const url = window.prompt("Image URL:");
-    if (url) editor.chain().focus().setImage({ src: url }).run();
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const src = reader.result;
+      if (typeof src === "string") {
+        editor.chain().focus().setImage({ src, alt: file.name }).run();
+      }
+    };
+    reader.readAsDataURL(file);
   }
 
   // ── Paragraph style dropdown ───────────────────────────
@@ -357,14 +918,56 @@ export default function Editor() {
     <AlignLeft size={16} />
   );
 
+  const imageActive = Boolean(editor?.isActive("image"));
+  const imageAttrs = imageActive ? editor?.getAttributes("image") : null;
+  const imageHeight = Number(imageAttrs?.height) || 240;
+  const imageOpacity = Number(imageAttrs?.opacity) || 100;
+  const imageRadius = Number(imageAttrs?.radius) || 0;
+  const imageRotate = Number(imageAttrs?.rotate) || 0;
+  const imageCropX = Number(imageAttrs?.cropX) || 50;
+  const imageCropY = Number(imageAttrs?.cropY) || 50;
+  const imageFit = ((imageAttrs?.fit as ImageFit | undefined) ??
+    "contain") as ImageFit;
+  const imageAlign = ((imageAttrs?.align as ImageAlign | undefined) ??
+    "left") as ImageAlign;
+
+  function updateImageAttrs(attrs: Record<string, number | string | null>) {
+    editor?.chain().updateAttributes("image", attrs).run();
+  }
+
+  function resetImageAttrs() {
+    updateImageAttrs({
+      width: null,
+      height: null,
+      opacity: 100,
+      fit: "contain",
+      align: "left",
+      cropX: 50,
+      cropY: 50,
+      radius: 6,
+      rotate: 0,
+    });
+  }
+
+  function openImageOptions() {
+    if (!imageToolbar) return;
+    setImageMenu({
+      x: Math.max(12, imageToolbar.x - 128),
+      y: imageToolbar.y + 40,
+    });
+  }
+
   // ── Dictation (Web Speech API) ─────────────────────────
   // Feature-detect only after mount so the first client render matches the
   // server (both start as "unsupported"), avoiding a hydration mismatch.
   const [dictationSupported, setDictationSupported] = useState(false);
   useEffect(() => {
-    setDictationSupported(
-      "SpeechRecognition" in window || "webkitSpeechRecognition" in window
-    );
+    const timer = window.setTimeout(() => {
+      setDictationSupported(
+        "SpeechRecognition" in window || "webkitSpeechRecognition" in window
+      );
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
   function toggleDictation() {
@@ -731,7 +1334,7 @@ export default function Editor() {
 
         {/* Block inserts (labeled) */}
         <div className="flex items-stretch gap-0.5">
-          <div className="relative">
+          <div ref={tableBtnRef}>
             <CmdBtn
               title="Insert table"
               label="Table"
@@ -740,31 +1343,38 @@ export default function Editor() {
             >
               <TableIcon size={18} />
             </CmdBtn>
-            {showTablePicker && (
-              <>
-                <div
-                  className="fixed inset-0 z-10"
-                  onClick={() => setShowTablePicker(false)}
-                />
-                <TableGridPicker
-                  onPick={(rows, cols) => {
-                    editor
-                      ?.chain()
-                      .focus()
-                      .insertTable({ rows, cols, withHeaderRow: true })
-                      .run();
-                    setShowTablePicker(false);
-                  }}
-                />
-              </>
-            )}
+            <PortalMenu
+              open={showTablePicker}
+              onClose={() => setShowTablePicker(false)}
+              anchorRef={tableBtnRef}
+            >
+              <TableGridPicker
+                onPick={(rows, cols) => {
+                  editor
+                    ?.chain()
+                    .focus()
+                    .insertTable({ rows, cols, withHeaderRow: true })
+                    .run();
+                  setShowTablePicker(false);
+                }}
+              />
+            </PortalMenu>
           </div>
 
-          <CmdBtn title="Insert image" label="Image" onClick={addImage}>
-            <ImageIcon size={18} />
-          </CmdBtn>
+          <div>
+            <input
+              ref={imageInputRef}
+              type="file"
+              accept="image/*"
+              onChange={addImageFromFile}
+              className="hidden"
+            />
+            <CmdBtn title="Insert image" label="Image" onClick={openImagePicker}>
+              <ImageIcon size={18} />
+            </CmdBtn>
+          </div>
 
-          <div className="relative">
+          <div ref={insertBtnRef}>
             <CmdBtn
               title="Insert element"
               label="Insert"
@@ -773,43 +1383,41 @@ export default function Editor() {
             >
               <Plus size={18} />
             </CmdBtn>
-            {showInsert && (
-              <>
-                <div
-                  className="fixed inset-0 z-10"
-                  onClick={() => setShowInsert(false)}
-                />
-                <div className="absolute left-0 z-20 mt-1 w-44 rounded-md border border-gray-200 bg-white py-1 shadow-lg">
-                  <button
-                    className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-100"
-                    onClick={() => {
-                      editor?.chain().focus().toggleBlockquote().run();
-                      setShowInsert(false);
-                    }}
-                  >
-                    <Quote size={15} /> Quote
-                  </button>
-                  <button
-                    className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-100"
-                    onClick={() => {
-                      editor?.chain().focus().toggleFrame().run();
-                      setShowInsert(false);
-                    }}
-                  >
-                    <FrameIcon size={15} /> Frame
-                  </button>
-                  <button
-                    className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-100"
-                    onClick={() => {
-                      editor?.chain().focus().setHorizontalRule().run();
-                      setShowInsert(false);
-                    }}
-                  >
-                    <Minus size={15} /> Horizontal line
-                  </button>
-                </div>
-              </>
-            )}
+            <PortalMenu
+              open={showInsert}
+              onClose={() => setShowInsert(false)}
+              anchorRef={insertBtnRef}
+            >
+              <div className="w-44 rounded-md border border-gray-200 bg-white py-1 shadow-lg">
+                <button
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-100"
+                  onClick={() => {
+                    editor?.chain().focus().toggleBlockquote().run();
+                    setShowInsert(false);
+                  }}
+                >
+                  <Quote size={15} /> Quote
+                </button>
+                <button
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-100"
+                  onClick={() => {
+                    editor?.chain().focus().toggleFrame().run();
+                    setShowInsert(false);
+                  }}
+                >
+                  <FrameIcon size={15} /> Frame
+                </button>
+                <button
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-100"
+                  onClick={() => {
+                    editor?.chain().focus().setHorizontalRule().run();
+                    setShowInsert(false);
+                  }}
+                >
+                  <Minus size={15} /> Horizontal line
+                </button>
+              </div>
+            </PortalMenu>
           </div>
         </div>
 
@@ -849,7 +1457,7 @@ export default function Editor() {
           <CmdBtn title="Print" label="Print" onClick={printDoc}>
             <Printer size={18} />
           </CmdBtn>
-          <div className="relative">
+          <div ref={exportBtnRef}>
             <CmdBtn
               title="Export"
               label="Export"
@@ -858,41 +1466,293 @@ export default function Editor() {
             >
               <Download size={18} />
             </CmdBtn>
-            {showExport && (
-              <>
-                <div
-                  className="fixed inset-0 z-10"
-                  onClick={() => setShowExport(false)}
-                />
-                <div className="absolute right-0 z-20 mt-1 w-44 rounded-md border border-gray-200 bg-white py-1 shadow-lg">
-                  <button
-                    className="block w-full px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-100"
-                    onClick={() => {
-                      if (editor)
-                        download("document.html", editor.getHTML(), "text/html");
-                      setShowExport(false);
-                    }}
-                  >
-                    Export as HTML
-                  </button>
-                  <button
-                    className="block w-full px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-100"
-                    onClick={() => {
-                      if (editor)
-                        download("document.txt", editor.getText(), "text/plain");
-                      setShowExport(false);
-                    }}
-                  >
-                    Export as Text
-                  </button>
-                </div>
-              </>
-            )}
+            <PortalMenu
+              open={showExport}
+              onClose={() => setShowExport(false)}
+              anchorRef={exportBtnRef}
+              align="right"
+            >
+              <div className="w-44 rounded-md border border-gray-200 bg-white py-1 shadow-lg">
+                <button
+                  className="block w-full px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-100"
+                  onClick={() => {
+                    if (editor)
+                      download("document.html", editor.getHTML(), "text/html");
+                    setShowExport(false);
+                  }}
+                >
+                  Export as HTML
+                </button>
+                <button
+                  className="block w-full px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-100"
+                  onClick={() => {
+                    if (editor)
+                      download("document.txt", editor.getText(), "text/plain");
+                    setShowExport(false);
+                  }}
+                >
+                  Export as Text
+                </button>
+              </div>
+            </PortalMenu>
           </div>
         </div>
       </div>
 
       {/* ── Find & replace bar ────────────────────────────── */}
+      {imageToolbar &&
+        imageActive &&
+        createPortal(
+          <div
+            className="fixed z-[94] flex -translate-x-1/2 items-center gap-1 rounded-md border border-gray-200 bg-white px-1.5 py-1 shadow-lg"
+            style={{ left: imageToolbar.x, top: imageToolbar.y }}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              title="Fit whole image"
+              onClick={() => updateImageAttrs({ fit: "contain", height: null })}
+              className={`h-8 rounded px-2 text-xs font-medium ${
+                imageFit === "contain"
+                  ? "bg-blue-50 text-blue-700"
+                  : "text-gray-700 hover:bg-gray-100"
+              }`}
+            >
+              Fit
+            </button>
+            <button
+              type="button"
+              title="Crop image"
+              onClick={() =>
+                updateImageAttrs(
+                  !imageAttrs?.height
+                    ? { fit: "cover", height: imageHeight }
+                    : { fit: "cover" }
+                )
+              }
+              className={`h-8 rounded px-2 text-xs font-medium ${
+                imageFit === "cover"
+                  ? "bg-blue-50 text-blue-700"
+                  : "text-gray-700 hover:bg-gray-100"
+              }`}
+            >
+              Crop
+            </button>
+            <span className="mx-1 h-5 w-px bg-gray-200" />
+            <button
+              type="button"
+              title="Align left"
+              onClick={() => updateImageAttrs({ align: "left" })}
+              className={`flex h-8 w-8 items-center justify-center rounded ${
+                imageAlign === "left"
+                  ? "bg-blue-50 text-blue-700"
+                  : "text-gray-700 hover:bg-gray-100"
+              }`}
+            >
+              <AlignLeft size={15} />
+            </button>
+            <button
+              type="button"
+              title="Align center"
+              onClick={() => updateImageAttrs({ align: "center" })}
+              className={`flex h-8 w-8 items-center justify-center rounded ${
+                imageAlign === "center"
+                  ? "bg-blue-50 text-blue-700"
+                  : "text-gray-700 hover:bg-gray-100"
+              }`}
+            >
+              <AlignCenter size={15} />
+            </button>
+            <button
+              type="button"
+              title="Align right"
+              onClick={() => updateImageAttrs({ align: "right" })}
+              className={`flex h-8 w-8 items-center justify-center rounded ${
+                imageAlign === "right"
+                  ? "bg-blue-50 text-blue-700"
+                  : "text-gray-700 hover:bg-gray-100"
+              }`}
+            >
+              <AlignRight size={15} />
+            </button>
+            <span className="mx-1 h-5 w-px bg-gray-200" />
+            <button
+              type="button"
+              title="Image options"
+              onClick={openImageOptions}
+              className="h-8 rounded px-2 text-xs font-medium text-gray-700 hover:bg-gray-100"
+            >
+              Options
+            </button>
+            <button
+              type="button"
+              title="Reset image"
+              onClick={resetImageAttrs}
+              className="h-8 rounded px-2 text-xs font-medium text-gray-700 hover:bg-gray-100"
+            >
+              Reset
+            </button>
+          </div>,
+          document.body
+        )}
+
+      {imageMenu &&
+        imageActive &&
+        createPortal(
+          <>
+            <div
+              className="fixed inset-0 z-[95]"
+              onMouseDown={() => setImageMenu(null)}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                setImageMenu(null);
+              }}
+            />
+            <div
+              className="fixed z-[96] w-64 rounded-md border border-gray-200 bg-white p-3 text-xs text-gray-600 shadow-xl"
+              style={{ left: imageMenu.x, top: imageMenu.y }}
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              <div className="mb-3 flex items-center justify-between">
+                <span className="text-sm font-semibold text-gray-900">
+                  Image options
+                </span>
+                <button
+                  type="button"
+                  title="Close"
+                  onClick={() => setImageMenu(null)}
+                  className="flex h-7 w-7 items-center justify-center rounded text-gray-500 hover:bg-gray-100"
+                >
+                  <X size={15} />
+                </button>
+              </div>
+
+              <label className="mb-3 block">
+                <span className="mb-1 block font-medium text-gray-700">
+                  Opacity
+                </span>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="range"
+                    min="10"
+                    max="100"
+                    value={imageOpacity}
+                    onChange={(e) =>
+                      updateImageAttrs({ opacity: Number(e.target.value) })
+                    }
+                    className="flex-1"
+                  />
+                  <span className="w-9 text-right tabular-nums">
+                    {imageOpacity}%
+                  </span>
+                </div>
+              </label>
+
+              <label className="mb-3 block">
+                <span className="mb-1 block font-medium text-gray-700">
+                  Crop mode
+                </span>
+                <select
+                  value={imageFit}
+                  onChange={(e) =>
+                    updateImageAttrs(
+                      e.target.value === "cover" && !imageAttrs?.height
+                        ? {
+                            fit: e.target.value as ImageFit,
+                            height: imageHeight,
+                          }
+                        : { fit: e.target.value as ImageFit }
+                    )
+                  }
+                  className="h-8 w-full rounded border border-gray-300 bg-white px-2"
+                >
+                  <option value="contain">Fit whole image</option>
+                  <option value="cover">Crop to box</option>
+                  <option value="fill">Stretch to box</option>
+                </select>
+              </label>
+
+              <div className="mb-3 grid grid-cols-2 gap-3">
+                <label>
+                  <span className="mb-1 block font-medium text-gray-700">
+                    Crop X
+                  </span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    disabled={imageFit !== "cover"}
+                    value={imageCropX}
+                    onChange={(e) =>
+                      updateImageAttrs({ cropX: Number(e.target.value) })
+                    }
+                    className="w-full disabled:opacity-40"
+                  />
+                </label>
+                <label>
+                  <span className="mb-1 block font-medium text-gray-700">
+                    Crop Y
+                  </span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    disabled={imageFit !== "cover"}
+                    value={imageCropY}
+                    onChange={(e) =>
+                      updateImageAttrs({ cropY: Number(e.target.value) })
+                    }
+                    className="w-full disabled:opacity-40"
+                  />
+                </label>
+              </div>
+
+              <label className="mb-3 block">
+                <span className="mb-1 block font-medium text-gray-700">
+                  Rounded corners
+                </span>
+                <input
+                  type="range"
+                  min="0"
+                  max="80"
+                  value={imageRadius}
+                  onChange={(e) =>
+                    updateImageAttrs({ radius: Number(e.target.value) })
+                  }
+                  className="w-full"
+                />
+              </label>
+
+              <label className="mb-3 block">
+                <span className="mb-1 block font-medium text-gray-700">
+                  Rotate
+                </span>
+                <input
+                  type="range"
+                  min="-180"
+                  max="180"
+                  value={imageRotate}
+                  onChange={(e) =>
+                    updateImageAttrs({ rotate: Number(e.target.value) })
+                  }
+                  className="w-full"
+                />
+              </label>
+
+              <div className="flex justify-end gap-2 border-t border-gray-100 pt-3">
+                <button
+                  type="button"
+                  onClick={resetImageAttrs}
+                  className="h-8 rounded border border-gray-300 bg-white px-3 text-gray-700 hover:bg-gray-100"
+                >
+                  Reset
+                </button>
+              </div>
+            </div>
+          </>,
+          document.body
+        )}
+
       {showFind && (
         <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-gray-200 bg-gray-50 px-3 py-2">
           <input
@@ -1005,7 +1865,9 @@ export default function Editor() {
       </div>
     </div>
   );
-}
+});
+
+export default Editor;
 
 // Minimal typing for the Web Speech API (not in standard lib.dom yet).
 interface SpeechRecognitionLike {
