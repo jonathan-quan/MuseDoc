@@ -163,6 +163,36 @@ function isRequestType(value: unknown): value is RequestType {
   );
 }
 
+/** Keyword-based fallback classifier used only when the model omits requestType. */
+function inferRequestType(message: string): RequestType {
+  const t = message.toLowerCase();
+  if (
+    /\b(rewrite|reword|rephrase|revise|edit|improve|polish|expand|shorten|condense|fix|correct|proofread|change the tone|make (this|it|the))\b/.test(
+      t
+    )
+  )
+    return "edit";
+  if (
+    /\b(write|draft|generate|create|compose|continue|produce|come up with|give me)\b/.test(
+      t
+    )
+  )
+    return "draft";
+  if (/\b(summari[sz]e|summary|tl;?dr|key points|outline|gist)\b/.test(t))
+    return "summarize";
+  if (
+    /\b(analy[sz]e|critique|evaluate|assess|gaps?|contradictions?|implications?|reason|why|how come)\b/.test(
+      t
+    )
+  )
+    return "reason";
+  if (
+    /\b(table|highlight|bold|italic|heading|title|insert|format)\b/.test(t)
+  )
+    return "tool_action";
+  return "q_and_a";
+}
+
 function isObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
@@ -303,6 +333,7 @@ export async function POST(request: Request) {
         },
         { role: "user", content: userContent },
       ],
+      text: { format: { type: "json_object" } },
     }),
   });
 
@@ -321,7 +352,7 @@ export async function POST(request: Request) {
     ? "edit"
     : result.actions?.length
     ? "tool_action"
-    : "q_and_a";
+    : inferRequestType(lastUserMessage.content);
   const replacement = result.replacement?.trim();
   const shouldReviewEdit =
     requestType === "edit" && Boolean(result.applyReplacement && replacement);

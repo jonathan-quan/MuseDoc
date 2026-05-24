@@ -18,7 +18,11 @@ import Editor, {
   type EditorHandle,
 } from "./components/Editor";
 
-type ChatMessage = { role: "user" | "assistant"; content: string };
+type ChatMessage = {
+  role: "user" | "assistant";
+  content: string;
+  requestType?: RequestType;
+};
 type Attachment = {
   id: string;
   name: string;
@@ -48,6 +52,15 @@ const modelOptions: { label: string; value: OpenAIModel }[] = [
   { label: "GPT-5.3 Chat", value: "gpt-5.3-chat-latest" },
   { label: "GPT-5.2", value: "gpt-5.2" },
 ];
+
+const requestTypeLabels: Record<RequestType, string> = {
+  q_and_a: "Q&A",
+  edit: "Edit",
+  draft: "Draft",
+  summarize: "Summary",
+  reason: "Reasoning",
+  tool_action: "Action",
+};
 
 const initialMessages: ChatMessage[] = [
   {
@@ -281,6 +294,7 @@ export default function Home() {
         ...prev,
         {
           role: "assistant",
+          requestType: payload.requestType,
           content: hasEdit
             ? "I prepared a suggested edit. Review it in the editor."
             : actions.length > 0
@@ -470,9 +484,16 @@ export default function Home() {
               <div
                 key={i}
                 className={
-                  m.role === "user" ? "flex justify-end" : "flex justify-start"
+                  m.role === "user"
+                    ? "flex justify-end"
+                    : "flex flex-col items-start gap-1"
                 }
               >
+                {m.role === "assistant" && m.requestType && (
+                  <span className="ml-1 rounded bg-gray-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                    {requestTypeLabels[m.requestType]}
+                  </span>
+                )}
                 <div
                   className={
                     m.role === "user"
