@@ -117,7 +117,95 @@ body {
   margin: 0.5em 0;
 }
 .editor-content img.ProseMirror-selectednode {
-  outline: 2px solid #3b82f6;
+  outline: none;
+}
+
+.editor-content .doc-image-resize-container {
+  margin: 0.5em 0;
+}
+
+.editor-content .doc-image-resize-wrapper {
+  line-height: 0;
+}
+
+.editor-content .doc-image-resize-container.ProseMirror-selectednode
+  .doc-image-resize-wrapper {
+  outline: 1px solid #9aa0a6;
+  outline-offset: 2px;
+}
+
+.editor-content .doc-image-resize-handle {
+  display: none;
+  z-index: 2;
+  box-sizing: border-box;
+  width: 9px;
+  height: 9px;
+  border: 1px solid #5f6368;
+  border-radius: 2px;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(60, 64, 67, 0.24);
+}
+
+.editor-content .doc-image-resize-container.ProseMirror-selectednode
+  .doc-image-resize-handle,
+.editor-content .doc-image-resize-container[data-resize-state="true"]
+  .doc-image-resize-handle {
+  display: block;
+}
+
+.editor-content .doc-image-resize-handle[data-resize-handle="top"],
+.editor-content .doc-image-resize-handle[data-resize-handle="bottom"] {
+  right: auto !important;
+  left: 50% !important;
+  margin-left: -4px;
+  margin-top: -4px;
+  margin-bottom: -4px;
+  cursor: ns-resize;
+}
+
+.editor-content .doc-image-resize-handle[data-resize-handle="left"],
+.editor-content .doc-image-resize-handle[data-resize-handle="right"] {
+  top: 50% !important;
+  bottom: auto !important;
+  margin-top: -4px;
+  margin-left: -4px;
+  margin-right: -4px;
+  cursor: ew-resize;
+}
+
+.editor-content .doc-image-resize-handle[data-resize-handle*="-"] {
+  width: 9px;
+  height: 9px;
+}
+
+.editor-content .doc-image-resize-handle[data-resize-handle="top-left"],
+.editor-content .doc-image-resize-handle[data-resize-handle="bottom-right"] {
+  cursor: nwse-resize;
+}
+
+.editor-content .doc-image-resize-handle[data-resize-handle="top-right"],
+.editor-content .doc-image-resize-handle[data-resize-handle="bottom-left"] {
+  cursor: nesw-resize;
+}
+
+.editor-content .doc-image-resize-handle[data-resize-handle="top-left"] {
+  margin-top: -5px;
+  margin-left: -5px;
+}
+
+.editor-content .doc-image-resize-handle[data-resize-handle="top-right"] {
+  margin-top: -5px;
+  margin-right: -5px;
+}
+
+.editor-content .doc-image-resize-handle[data-resize-handle="bottom-left"] {
+  margin-bottom: -5px;
+  margin-left: -5px;
+}
+
+.editor-content .doc-image-resize-handle[data-resize-handle="bottom-right"] {
+  margin-right: -5px;
+  margin-bottom: -5px;
 }
 
 /* Frames (custom node) */
