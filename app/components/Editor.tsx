@@ -450,6 +450,156 @@ function IconDropdown({
 const selectClass =
   "h-8 cursor-pointer rounded-md border border-gray-200 bg-white px-2 text-sm text-gray-600 outline-none hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700";
 
+// Common fonts (with a generic fallback so they render even when the exact
+// face isn't installed). The dropdown previews each name in its own font.
+const FONT_FAMILIES: { name: string; fallback: string }[] = [
+  { name: "Arial", fallback: "sans-serif" },
+  { name: "Helvetica", fallback: "sans-serif" },
+  { name: "Verdana", fallback: "sans-serif" },
+  { name: "Tahoma", fallback: "sans-serif" },
+  { name: "Trebuchet MS", fallback: "sans-serif" },
+  { name: "Segoe UI", fallback: "sans-serif" },
+  { name: "Calibri", fallback: "sans-serif" },
+  { name: "Gill Sans", fallback: "sans-serif" },
+  { name: "Century Gothic", fallback: "sans-serif" },
+  { name: "Franklin Gothic Medium", fallback: "sans-serif" },
+  { name: "Lucida Sans", fallback: "sans-serif" },
+  { name: "Optima", fallback: "sans-serif" },
+  { name: "Futura", fallback: "sans-serif" },
+  { name: "Geneva", fallback: "sans-serif" },
+  { name: "Impact", fallback: "sans-serif" },
+  { name: "Times New Roman", fallback: "serif" },
+  { name: "Georgia", fallback: "serif" },
+  { name: "Garamond", fallback: "serif" },
+  { name: "Palatino Linotype", fallback: "serif" },
+  { name: "Book Antiqua", fallback: "serif" },
+  { name: "Cambria", fallback: "serif" },
+  { name: "Baskerville", fallback: "serif" },
+  { name: "Constantia", fallback: "serif" },
+  { name: "Rockwell", fallback: "serif" },
+  { name: "Courier New", fallback: "monospace" },
+  { name: "Consolas", fallback: "monospace" },
+  { name: "Lucida Console", fallback: "monospace" },
+  { name: "Monaco", fallback: "monospace" },
+  { name: "Comic Sans MS", fallback: "cursive" },
+  { name: "Brush Script MT", fallback: "cursive" },
+];
+
+const FONT_SIZE_PRESETS = [
+  "8", "9", "10", "11", "12", "14", "16", "18", "20", "24", "28", "32", "36",
+  "48", "60", "72",
+];
+
+/** Compact font-size control: a typeable field plus a small preset dropdown. */
+function FontSizeControl({ apply }: { apply: (value: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+
+  return (
+    <div
+      ref={ref}
+      className="flex h-8 items-center rounded-md border border-gray-200 bg-white pl-1 text-sm text-gray-600 focus-within:border-gray-400 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+    >
+      <input
+        type="text"
+        inputMode="numeric"
+        aria-label="Font size"
+        title="Font size"
+        placeholder="Size"
+        value={value}
+        onChange={(e) => setValue(e.target.value.replace(/[^\d]/g, ""))}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            apply(value);
+          }
+        }}
+        onBlur={() => apply(value)}
+        className="w-8 bg-transparent text-center outline-none placeholder:text-gray-400"
+      />
+      <button
+        type="button"
+        aria-label="Font size presets"
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => setOpen((v) => !v)}
+        className="flex h-full w-5 items-center justify-center rounded-r-md text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+      >
+        <ChevronDown size={13} />
+      </button>
+      <PortalMenu
+        open={open}
+        onClose={() => setOpen(false)}
+        anchorRef={ref}
+        align="right"
+      >
+        <div className="no-scrollbar max-h-56 w-14 overflow-y-auto overscroll-contain rounded-md border border-gray-200 bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-800">
+          {FONT_SIZE_PRESETS.map((s) => (
+            <button
+              key={s}
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
+                setValue(s);
+                apply(s);
+                setOpen(false);
+              }}
+              className="block w-full px-3 py-1 text-left text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      </PortalMenu>
+    </div>
+  );
+}
+
+/** Font-family dropdown: a scrollable list (scrollbar hidden) of common fonts,
+ *  each previewed in its own face. */
+function FontFamilyControl({ apply }: { apply: (stack: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLButtonElement>(null);
+
+  return (
+    <>
+      <button
+        ref={ref}
+        type="button"
+        title="Font"
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => setOpen((v) => !v)}
+        className={`${selectClass} flex w-full items-center justify-between gap-1`}
+      >
+        <span>Font</span>
+        <ChevronDown size={13} />
+      </button>
+      <PortalMenu open={open} onClose={() => setOpen(false)} anchorRef={ref}>
+        <div className="no-scrollbar max-h-72 w-48 overflow-y-auto overscroll-contain rounded-md border border-gray-200 bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-800">
+          {FONT_FAMILIES.map((f) => {
+            const stack = `"${f.name}", ${f.fallback}`;
+            return (
+              <button
+                key={f.name}
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  apply(stack);
+                  setOpen(false);
+                }}
+                style={{ fontFamily: stack }}
+                className="block w-full px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
+              >
+                {f.name}
+              </button>
+            );
+          })}
+        </div>
+      </PortalMenu>
+    </>
+  );
+}
+
 function TableGridPicker({
   onPick,
 }: {
@@ -584,6 +734,134 @@ function textToEditorContent(text: string) {
   return blocks;
 }
 
+// Prose styling for exported / printed documents. Mirrors the `.editor-content`
+// rules in globals.css (light theme) so a Print or HTML export looks the same
+// as the editor — including borderless two-column "layout tables" and the
+// section rule under h2 headings.
+const EXPORT_STYLES = `
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    max-width: 720px; margin: 48px auto; padding: 0 24px;
+    color: #111; font-size: 15px; line-height: 1.5; }
+  h1 { font-size: 1.7rem; font-weight: 700; line-height: 1.2; margin: 0.5em 0 0.25em; }
+  h2 { font-size: 1.2rem; font-weight: 700; line-height: 1.25; margin: 0.7em 0 0.2em;
+    border-bottom: 1px solid #d1d5db; padding-bottom: 0.12em; }
+  h3 { font-size: 1.05rem; font-weight: 700; line-height: 1.3; margin: 0.6em 0 0.15em; }
+  p { margin: 0.35em 0; }
+  a { color: #2563eb; text-decoration: underline; }
+  ul { list-style: disc; padding-left: 1.5rem; margin: 0.35em 0; }
+  ol { list-style: decimal; padding-left: 1.5rem; margin: 0.35em 0; }
+  li { margin: 0.1em 0; }
+  li > p { margin: 0; }
+  blockquote { border-left: 3px solid #d1d5db; padding-left: 1em; color: #4b5563; margin: 1em 0; }
+  hr { border: none; border-top: 1px solid #d1d5db; margin: 1.5em 0; }
+  img { max-width: 100%; height: auto; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { border: 1px solid #d1d5db; padding: 6px 10px; vertical-align: top; }
+  th { background: #f3f4f6; font-weight: 600; text-align: left; }
+  table.layout-table { table-layout: auto; margin: 0.2em 0; }
+  table.layout-table th, table.layout-table td { border: none; padding: 0; }
+  table.layout-table td:last-child { width: 1%; white-space: nowrap; text-align: right; padding-left: 1.5em; }
+  table.layout-table p { margin: 0; }
+  [data-type=frame] { border: 1px solid #d1d5db; border-radius: 8px; padding: 12px 16px; }
+`;
+
+function buildExportDocument(title: string, bodyHtml: string) {
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><style>${EXPORT_STYLES}</style></head><body>${bodyHtml}</body></html>`;
+}
+
+// ── Markdown export ──────────────────────────────────────────
+// Serialize the editor's ProseMirror JSON to Markdown.
+type PMNode = {
+  type: string;
+  attrs?: Record<string, unknown>;
+  content?: PMNode[];
+  text?: string;
+  marks?: { type: string; attrs?: Record<string, unknown> }[];
+};
+
+function inlineToMarkdown(nodes: PMNode[] = []): string {
+  return nodes
+    .map((node) => {
+      if (node.type === "hardBreak") return "  \n";
+      if (node.type !== "text") return inlineToMarkdown(node.content);
+      let text = node.text ?? "";
+      const marks = node.marks ?? [];
+      const has = (type: string) => marks.some((mark) => mark.type === type);
+      if (has("code")) text = "`" + text + "`";
+      if (has("bold")) text = `**${text}**`;
+      if (has("italic")) text = `*${text}*`;
+      const link = marks.find((mark) => mark.type === "link");
+      if (link?.attrs?.href) text = `[${text}](${String(link.attrs.href)})`;
+      return text;
+    })
+    .join("");
+}
+
+function blocksToMarkdown(nodes: PMNode[] = [], depth = 0): string {
+  const out: string[] = [];
+  for (const node of nodes) {
+    switch (node.type) {
+      case "heading":
+        out.push(
+          "#".repeat(Number(node.attrs?.level ?? 1)) +
+            " " +
+            inlineToMarkdown(node.content)
+        );
+        break;
+      case "paragraph":
+        out.push(inlineToMarkdown(node.content));
+        break;
+      case "bulletList":
+      case "orderedList": {
+        const ordered = node.type === "orderedList";
+        const indent = "  ".repeat(depth);
+        (node.content ?? []).forEach((item, index) => {
+          const marker = ordered ? `${index + 1}.` : "-";
+          const inner = blocksToMarkdown(item.content, depth + 1).trim();
+          const lines = inner.split("\n");
+          out.push(`${indent}${marker} ${lines.join(`\n${indent}  `)}`);
+        });
+        break;
+      }
+      case "blockquote":
+        out.push(
+          blocksToMarkdown(node.content)
+            .split("\n")
+            .map((line) => `> ${line}`)
+            .join("\n")
+        );
+        break;
+      case "horizontalRule":
+        out.push("---");
+        break;
+      case "table": {
+        const rows = (node.content ?? []).map((row) =>
+          (row.content ?? []).map((cell) =>
+            blocksToMarkdown(cell.content).replace(/\s*\n\s*/g, " ").trim()
+          )
+        );
+        if (rows.length) {
+          const cols = rows[0].length;
+          out.push(`| ${rows[0].join(" | ")} |`);
+          out.push(`| ${Array(cols).fill("---").join(" | ")} |`);
+          for (const row of rows.slice(1)) out.push(`| ${row.join(" | ")} |`);
+        }
+        break;
+      }
+      case "image":
+        if (node.attrs?.src) out.push(`![](${String(node.attrs.src)})`);
+        break;
+      default:
+        if (node.content) out.push(blocksToMarkdown(node.content, depth));
+    }
+  }
+  return out.join("\n\n");
+}
+
+function editorMarkdown(doc: PMNode): string {
+  return `${blocksToMarkdown(doc.content).trim()}\n`;
+}
+
 function tableContent(rows: string[][]) {
   return {
     type: "table",
@@ -618,6 +896,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
     y: number;
   } | null>(null);
   const [listening, setListening] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [, setTick] = useState(0); // force re-render on editor changes
 
   const recognitionRef = useRef<unknown>(null);
@@ -648,7 +927,22 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
       TaskList,
       TaskItem.configure({ nested: true }),
       EditableImage.configure({ allowBase64: true }),
-      Table.configure({ resizable: true }),
+      // Keep the table's `class` attribute through copy/paste and setContent so
+      // imported two-column rows can opt into the borderless ".layout-table"
+      // styling (see globals.css).
+      Table.extend({
+        addAttributes() {
+          return {
+            ...this.parent?.(),
+            class: {
+              default: null,
+              parseHTML: (element) => element.getAttribute("class"),
+              renderHTML: (attributes) =>
+                attributes.class ? { class: attributes.class } : {},
+            },
+          };
+        },
+      }).configure({ resizable: true }),
       TableRow,
       TableHeader,
       TableCell,
@@ -660,7 +954,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
     editorProps: {
       attributes: {
         class:
-          "editor-content min-h-[60vh] text-[17px] leading-8 text-gray-800 outline-none dark:text-gray-100",
+          "editor-content min-h-[60vh] text-[15px] leading-[1.5] text-gray-800 outline-none dark:text-gray-100",
       },
       handleDOMEvents: {
         contextmenu: (view, event) => {
@@ -916,8 +1210,287 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
     imageInputRef.current?.click();
   }
 
-  // ── Import a document from disk (.txt, .md, .html) ─────
-  function importDocument(e: ChangeEvent<HTMLInputElement>) {
+  // ── Import a document from disk (.pdf, .docx, .txt, .md, .html) ─────
+  // Reconstruct structure from a PDF and return HTML. A PDF stores positioned
+  // glyphs, not semantic structure, so this is a best-effort rebuild:
+  //   • glyph runs are grouped into visual lines (pdf.js marks line ends);
+  //   • the real font (read from page.commonObjs, not the generic family in
+  //     getTextContent styles) gives reliable bold/italic flags;
+  //   • font size relative to the body size detects headings;
+  //   • leading markers detect bullet lists;
+  //   • a wide horizontal gap inside a line (title … date) becomes a
+  //     borderless two-column "layout table" — it stays editable and reflows;
+  //   • lines centred on the page keep their centring.
+  // The worker is served from /public so it loads reliably regardless of
+  // bundler.
+  async function extractPdfHtml(data: ArrayBuffer) {
+    // x = left edge, w = advance width — used to find two-column gaps.
+    type Run = { text: string; bold: boolean; italic: boolean; x: number; w: number };
+    type Line = {
+      x: number;
+      size: number;
+      centered: boolean;
+      runs: Run[];
+      text: string;
+    };
+
+    const escapeHtml = (value: string) =>
+      value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+    const runsToHtml = (runs: Run[]) =>
+      runs
+        .map((run) => {
+          const text = escapeHtml(run.text);
+          if (!text) return "";
+          if (run.bold) return `<strong>${text}</strong>`;
+          if (run.italic) return `<em>${text}</em>`;
+          return text;
+        })
+        .join("");
+
+    const boldRe = /bold|black|heavy|semibold|demi|cmbx|cmb\d|[-_ ]bd\b/i;
+    const italicRe = /italic|oblique|cmti|cmsl|[-_ ]it\b/i;
+
+    const pdfjs = await import("pdfjs-dist");
+    pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
+    const pdf = await pdfjs.getDocument({ data: new Uint8Array(data) }).promise;
+
+    // Pass 1: group glyph runs into visual lines, tracking font size, left
+    // edge, page-centring, and the real bold/italic flags of each run.
+    const lines: Line[] = [];
+    for (let i = 1; i <= pdf.numPages; i += 1) {
+      const page = await pdf.getPage(i);
+      const pageWidth = page.getViewport({ scale: 1 }).width;
+      // getOperatorList parses the embedded fonts so commonObjs can resolve
+      // each font's real name and bold/italic flags (the styles map only has
+      // a generic family like "serif").
+      await page.getOperatorList();
+      const content = await page.getTextContent();
+
+      const fontFlags = (id?: string) => {
+        if (!id) return { bold: false, italic: false };
+        try {
+          if (page.commonObjs.has(id)) {
+            const font = page.commonObjs.get(id) as {
+              name?: string;
+              bold?: boolean;
+              italic?: boolean;
+              black?: boolean;
+            };
+            const name = font?.name ?? "";
+            return {
+              bold: Boolean(font?.bold || font?.black) || boldRe.test(name),
+              italic: Boolean(font?.italic) || italicRe.test(name),
+            };
+          }
+        } catch {
+          // commonObjs entry not ready — fall through to "no styling".
+        }
+        return { bold: false, italic: false };
+      };
+
+      let current: Line | null = null;
+      let minX = 0;
+      let maxX = 0;
+
+      const flush = () => {
+        if (!current) return;
+        current.text = current.runs.map((run) => run.text).join("");
+        if (current.text.trim()) {
+          const width = maxX - minX;
+          current.x = minX;
+          current.centered =
+            width > 0 &&
+            width < pageWidth * 0.85 &&
+            minX > pageWidth * 0.12 &&
+            Math.abs(minX - (pageWidth - maxX)) < pageWidth * 0.12;
+          lines.push(current);
+        }
+        current = null;
+      };
+
+      for (const item of content.items) {
+        if (!("str" in item)) continue;
+        const it = item as {
+          str: string;
+          transform: number[];
+          width?: number;
+          fontName?: string;
+          hasEOL?: boolean;
+        };
+        if (it.str) {
+          const size = Math.hypot(it.transform[2], it.transform[3]) || 0;
+          const x = it.transform[4];
+          const right = x + (it.width ?? 0);
+          const { bold, italic } = fontFlags(it.fontName);
+          if (!current) {
+            current = { x, size, centered: false, runs: [], text: "" };
+            minX = x;
+            maxX = right;
+          } else {
+            current.size = Math.max(current.size, size);
+            minX = Math.min(minX, x);
+            maxX = Math.max(maxX, right);
+          }
+          current.runs.push({ text: it.str, bold, italic, x, w: it.width ?? 0 });
+        }
+        if (it.hasEOL) flush();
+      }
+      flush();
+    }
+
+    if (!lines.length) return "";
+
+    // Body font size = the most common rounded line height. Anything notably
+    // larger is treated as a heading.
+    const sizeFreq = new Map<number, number>();
+    for (const line of lines) {
+      const key = Math.round(line.size);
+      sizeFreq.set(key, (sizeFreq.get(key) ?? 0) + 1);
+    }
+    let bodySize = 12;
+    let bestCount = -1;
+    for (const [size, count] of sizeFreq) {
+      if (count > bestCount) {
+        bestCount = count;
+        bodySize = size;
+      }
+    }
+    bodySize = Math.max(bodySize, 1);
+
+    const bulletRe = /^\s*(?:[•‣◦⁃∙·▪●]\s*|[-*]\s+)/;
+
+    const headingLevel = (line: Line): 0 | 1 | 2 | 3 => {
+      const text = line.text.trim();
+      if (!text || bulletRe.test(line.text)) return 0;
+      const ratio = line.size / bodySize;
+      if (ratio >= 1.55) return 1;
+      if (ratio >= 1.28) return 2;
+      if (ratio >= 1.1) return 3;
+      // A short, fully bold standalone line (no right-hand date column, which
+      // is handled separately) reads as a section heading even at body size —
+      // e.g. resume section titles like "Education".
+      const allBold =
+        line.runs.length > 0 &&
+        line.runs.every((run) => !run.text.trim() || run.bold);
+      if (allBold && text.length <= 60) return 2;
+      return 0;
+    };
+
+    const stripBullet = (runs: Run[]): Run[] => {
+      const copy = runs.map((run) => ({ ...run }));
+      for (const run of copy) {
+        if (!run.text.trim()) continue;
+        // The marker may be its own run, so strip it then stop.
+        run.text = run.text.replace(bulletRe, "");
+        break;
+      }
+      return copy;
+    };
+
+    // A wide horizontal gap marks a left/right two-column row (e.g. a job
+    // title with a right-aligned date). The gap is usually a single very wide
+    // whitespace run (from LaTeX \hfill / Word tab stops), occasionally a
+    // positional jump between runs. Returns the left/right run groups, or null.
+    const columnSplit = (line: Line): { left: Run[]; right: Run[] } | null => {
+      if (line.runs.length < 2) return null;
+      const threshold = line.size * 3;
+      for (let k = 1; k < line.runs.length; k += 1) {
+        const prev = line.runs[k - 1];
+        const run = line.runs[k];
+        const wideSpace = !run.text.trim() && run.w > threshold;
+        const positionalGap = run.x - (prev.x + prev.w) > threshold;
+        if (!wideSpace && !positionalGap) continue;
+        // Drop the separator run itself when it's the wide space.
+        const left = line.runs.slice(0, k);
+        const right = line.runs.slice(wideSpace ? k + 1 : k);
+        if (left.some((r) => r.text.trim()) && right.some((r) => r.text.trim())) {
+          return { left, right };
+        }
+      }
+      return null;
+    };
+
+    // Pass 2: emit HTML, grouping consecutive bullets into a list and folding
+    // hanging-indent continuation lines back into their bullet.
+    const out: string[] = [];
+    let listOpen = false;
+    const closeList = () => {
+      if (listOpen) {
+        out.push("</ul>");
+        listOpen = false;
+      }
+    };
+    const align = (centered: boolean) =>
+      centered ? ' style="text-align: center"' : "";
+
+    let i = 0;
+    while (i < lines.length) {
+      const line = lines[i];
+
+      if (bulletRe.test(line.text)) {
+        if (!listOpen) {
+          out.push("<ul>");
+          listOpen = true;
+        }
+        let itemRuns = stripBullet(line.runs);
+        const bulletX = line.x;
+        let j = i + 1;
+        while (j < lines.length) {
+          const next = lines[j];
+          // Stop at the next bullet, a heading, or a line that dedents back to
+          // (or past) the bullet marker — those start new content.
+          if (headingLevel(next) || bulletRe.test(next.text)) break;
+          if (next.x < bulletX - 1) break;
+          itemRuns = [
+            ...itemRuns,
+            { text: " ", bold: false, italic: false, x: next.x, w: 0 },
+            ...next.runs,
+          ];
+          j += 1;
+        }
+        out.push(`<li>${runsToHtml(itemRuns)}</li>`);
+        i = j;
+        continue;
+      }
+
+      // Two-column row (title left / date right). Checked before headings so a
+      // bold "title … date" line becomes a row, not a single heading.
+      const cols = columnSplit(line);
+      if (cols) {
+        closeList();
+        const left = runsToHtml(cols.left).trim();
+        const right = runsToHtml(cols.right).trim();
+        out.push(
+          '<table class="layout-table"><tbody><tr>' +
+            `<td><p>${left}</p></td>` +
+            `<td><p>${right}</p></td>` +
+            "</tr></tbody></table>"
+        );
+        i += 1;
+        continue;
+      }
+
+      const level = headingLevel(line);
+      if (level) {
+        closeList();
+        out.push(
+          `<h${level}${align(line.centered)}>${runsToHtml(line.runs)}</h${level}>`
+        );
+        i += 1;
+        continue;
+      }
+
+      closeList();
+      out.push(`<p${align(line.centered)}>${runsToHtml(line.runs)}</p>`);
+      i += 1;
+    }
+    closeList();
+
+    return out.join("");
+  }
+
+  async function importDocument(e: ChangeEvent<HTMLInputElement>) {
     if (!editor) return;
     const file = e.target.files?.[0];
     e.target.value = "";
@@ -931,19 +1504,38 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
       return;
     }
 
-    const reader = new FileReader();
-    reader.onerror = () => window.alert(`Could not read ${file.name}.`);
-    reader.onload = () => {
-      const text = typeof reader.result === "string" ? reader.result : "";
-      const isHtml = file.type === "text/html" || /\.html?$/i.test(file.name);
-      // HTML is parsed by TipTap; plain text / Markdown headings become blocks.
-      editor
-        .chain()
-        .focus()
-        .setContent(isHtml ? text : textToEditorContent(text))
-        .run();
-    };
-    reader.readAsText(file);
+    const name = file.name.toLowerCase();
+    setImporting(true);
+    try {
+      if (name.endsWith(".docx")) {
+        // Word → HTML, preserving headings, lists, tables, bold/italic, etc.
+        const mammoth = (await import("mammoth")).default;
+        const { value } = await mammoth.convertToHtml({
+          arrayBuffer: await file.arrayBuffer(),
+        });
+        editor.chain().focus().setContent(value).run();
+      } else if (name.endsWith(".pdf")) {
+        const html = await extractPdfHtml(await file.arrayBuffer());
+        editor.chain().focus().setContent(html || "<p></p>").run();
+      } else if (name.endsWith(".html") || name.endsWith(".htm")) {
+        editor.chain().focus().setContent(await file.text()).run();
+      } else {
+        // .txt, .md, and other plain-text files
+        editor
+          .chain()
+          .focus()
+          .setContent(textToEditorContent(await file.text()))
+          .run();
+      }
+    } catch (error) {
+      window.alert(
+        `Could not import ${file.name}: ${
+          error instanceof Error ? error.message : "unknown error"
+        }`
+      );
+    } finally {
+      setImporting(false);
+    }
   }
 
   function addImageFromFile(e: ChangeEvent<HTMLInputElement>) {
@@ -982,12 +1574,12 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
     }
   }
 
-  // ── Font / size (apply-and-reset selects) ──────────────
-  function onSelect(
-    e: ChangeEvent<HTMLSelectElement>,
-    apply: (v: string) => void
-  ) {
-    if (e.target.value) apply(e.target.value);
+  // Apply a typed/selected font size (in px). Ignores invalid input.
+  function applyFontSize(value: string) {
+    const size = parseInt(value, 10);
+    if (!Number.isNaN(size) && size > 0 && size <= 400) {
+      editor?.chain().focus().setFontSize(`${size}px`).run();
+    }
   }
 
   // Current alignment, for the alignment dropdown's icon.
@@ -1088,22 +1680,38 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
     if (!editor) return;
     const win = window.open("", "_blank");
     if (!win) return;
-    win.document.write(
-      `<html><head><title>Document</title><style>body{font-family:system-ui,sans-serif;max-width:680px;margin:48px auto;padding:0 24px;line-height:1.6;color:#111}h1,h2,h3{line-height:1.25}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:6px 10px}th{background:#f3f4f6}img{max-width:100%}blockquote{border-left:3px solid #ccc;padding-left:1em;color:#555}[data-type=frame]{border:1px solid #ccc;border-radius:8px;padding:12px 16px}</style></head><body>${editor.getHTML()}</body></html>`
-    );
+    win.document.write(buildExportDocument("Document", editor.getHTML()));
     win.document.close();
     win.focus();
     win.print();
   }
 
-  function download(filename: string, content: string, type: string) {
-    const blob = new Blob([content], { type });
+  function downloadBlob(filename: string, blob: Blob) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
     a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  function download(filename: string, content: string, type: string) {
+    downloadBlob(filename, new Blob([content], { type }));
+  }
+
+  // Word export: a Word-flavoured HTML document (.doc) that Microsoft Word and
+  // Google Docs open with formatting intact. Uses the Office namespaces + the
+  // shared export styles. Dependency-free, so nothing to bundle.
+  function exportWord() {
+    if (!editor) return;
+    const header =
+      "<html xmlns:o='urn:schemas-microsoft-com:office:office' " +
+      "xmlns:w='urn:schemas-microsoft-com:office:word' " +
+      "xmlns='http://www.w3.org/TR/REC-html40'>" +
+      `<head><meta charset="utf-8"><style>${EXPORT_STYLES}</style></head><body>`;
+    // Leading BOM so Word detects UTF-8.
+    const doc = `﻿${header}${editor.getHTML()}</body></html>`;
+    downloadBlob("document.doc", new Blob([doc], { type: "application/msword" }));
   }
 
   // ── Find & replace state (read from extension storage) ─
@@ -1126,7 +1734,15 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
       <div
         ref={toolbarRef}
         onWheel={(e) => {
-          if (toolbarRef.current && e.deltaY !== 0) {
+          // Only translate vertical wheel into horizontal toolbar scroll when
+          // the wheel happens inside the toolbar itself. Portaled dropdowns are
+          // React children of the toolbar, so without this guard their wheel
+          // events would bubble here and scroll the toolbar.
+          if (
+            toolbarRef.current &&
+            e.deltaY !== 0 &&
+            toolbarRef.current.contains(e.target as Node)
+          ) {
             toolbarRef.current.scrollLeft += e.deltaY;
           }
         }}
@@ -1173,29 +1789,9 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
 
         {/* Font & character */}
         <div className="flex flex-col justify-center gap-1">
-          <select
-            aria-label="Font family"
-            value=""
-            onChange={(e) =>
-              onSelect(e, (v) => editor?.chain().focus().setFontFamily(v).run())
-            }
-            className={`${selectClass} w-full`}
-          >
-            <option value="" disabled>
-              Font
-            </option>
-            {[
-              "Arial",
-              "Georgia",
-              "Times New Roman",
-              "Courier New",
-              "Verdana",
-            ].map((f) => (
-              <option key={f} value={f} style={{ fontFamily: f }}>
-                {f}
-              </option>
-            ))}
-          </select>
+          <FontFamilyControl
+            apply={(stack) => editor?.chain().focus().setFontFamily(stack).run()}
+          />
           <div className="flex items-center gap-0.5">
             <TBtn
               title="Bold"
@@ -1218,25 +1814,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
             >
               <Underline size={16} />
             </TBtn>
-            <select
-              aria-label="Font size"
-              value=""
-              onChange={(e) =>
-                onSelect(e, (v) =>
-                  editor?.chain().focus().setFontSize(`${v}px`).run()
-                )
-              }
-              className={`${selectClass} w-[4.5rem]`}
-            >
-              <option value="" disabled>
-                Size
-              </option>
-              {["12", "14", "16", "18", "20", "24", "30", "36"].map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
+            <FontSizeControl apply={applyFontSize} />
           </div>
         </div>
 
@@ -1540,13 +2118,14 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
           <input
             ref={importInputRef}
             type="file"
-            accept=".txt,.md,.markdown,.html,.htm,text/plain,text/markdown,text/html"
+            accept=".pdf,.docx,.txt,.md,.markdown,.html,.htm,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,text/html"
             onChange={importDocument}
             className="hidden"
           />
           <CmdBtn
-            title="Import a .txt, .md, or .html file"
-            label="Import"
+            title="Import a PDF, Word (.docx), text, or HTML file"
+            label={importing ? "Importing…" : "Import"}
+            disabled={importing}
             onClick={() => importInputRef.current?.click()}
           >
             <Upload size={18} />
@@ -1569,12 +2148,49 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
               anchorRef={exportBtnRef}
               align="right"
             >
-              <div className="w-44 rounded-md border border-gray-200 bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-800">
+              <div className="w-52 rounded-md border border-gray-200 bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-800">
+                <button
+                  className="block w-full px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
+                  onClick={() => {
+                    printDoc();
+                    setShowExport(false);
+                  }}
+                >
+                  Export as PDF
+                </button>
+                <button
+                  className="block w-full px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
+                  onClick={() => {
+                    exportWord();
+                    setShowExport(false);
+                  }}
+                >
+                  Export as Word (.doc)
+                </button>
                 <button
                   className="block w-full px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
                   onClick={() => {
                     if (editor)
-                      download("document.html", editor.getHTML(), "text/html");
+                      download(
+                        "document.md",
+                        editorMarkdown(editor.getJSON() as PMNode),
+                        "text/markdown"
+                      );
+                    setShowExport(false);
+                  }}
+                >
+                  Export as Markdown
+                </button>
+                <div className="my-1 border-t border-gray-200 dark:border-gray-700" />
+                <button
+                  className="block w-full px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
+                  onClick={() => {
+                    if (editor)
+                      download(
+                        "document.html",
+                        buildExportDocument("Document", editor.getHTML()),
+                        "text/html"
+                      );
                     setShowExport(false);
                   }}
                 >
@@ -1954,8 +2570,8 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
           </nav>
         )}
 
-        <div className="flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-2xl px-10 py-12">
+        <div className="flex-1 overflow-y-auto bg-gray-200 dark:bg-gray-950">
+          <div className="mx-auto my-8 min-h-[1056px] w-full max-w-[816px] rounded-sm bg-white px-[64px] py-[56px] shadow-lg dark:bg-gray-900">
             <EditorContent editor={editor} />
           </div>
         </div>
