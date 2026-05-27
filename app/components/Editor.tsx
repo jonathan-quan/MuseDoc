@@ -33,6 +33,7 @@ import {
   type ReactNode,
   type ChangeEvent,
   type RefObject,
+  type UIEvent as ReactUIEvent,
 } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -758,10 +759,14 @@ const EXPORT_STYLES = `
   table { border-collapse: collapse; width: 100%; margin: 1em 0; }
   th, td { border: 1px solid #d1d5db; padding: 6px 10px; vertical-align: top; }
   th { background: #f3f4f6; font-weight: 600; text-align: left; }
-  table.layout-table { table-layout: auto; margin: 0.2em 0; }
-  table.layout-table th, table.layout-table td { border: none; padding: 0; }
-  table.layout-table td:last-child { width: 1%; white-space: nowrap; text-align: right; padding-left: 1.5em; }
-  table.layout-table p { margin: 0; }
+  table.layout-table,
+  table:has(> tbody > tr:only-child > td:nth-child(2):last-child) { table-layout: auto; margin: 0.2em 0; }
+  table.layout-table th, table.layout-table td,
+  table:has(> tbody > tr:only-child > td:nth-child(2):last-child) td { border: none; padding: 0; }
+  table.layout-table td:last-child,
+  table:has(> tbody > tr:only-child > td:nth-child(2):last-child) td:last-child { width: 1%; white-space: nowrap; text-align: right; padding-left: 1.5em; }
+  table.layout-table p,
+  table:has(> tbody > tr:only-child > td:nth-child(2):last-child) p { margin: 0; }
   [data-type=frame] { border: 1px solid #d1d5db; border-radius: 8px; padding: 12px 16px; }
 `;
 
@@ -907,6 +912,18 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
   const tableBtnRef = useRef<HTMLDivElement>(null);
   const insertBtnRef = useRef<HTMLDivElement>(null);
   const exportBtnRef = useRef<HTMLDivElement>(null);
+  const scrollHideTimer = useRef<number | null>(null);
+
+  // Reveal the slim scrollbar while scrolling, then fade it out when idle.
+  function showScrollbarBriefly(e: ReactUIEvent<HTMLDivElement>) {
+    const el = e.currentTarget;
+    el.classList.add("is-scrolling");
+    if (scrollHideTimer.current) window.clearTimeout(scrollHideTimer.current);
+    scrollHideTimer.current = window.setTimeout(
+      () => el.classList.remove("is-scrolling"),
+      900
+    );
+  }
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -2570,8 +2587,11 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
           </nav>
         )}
 
-        <div className="flex-1 overflow-y-auto bg-gray-200 dark:bg-gray-950">
-          <div className="mx-auto my-8 min-h-[1056px] w-full max-w-[816px] rounded-sm bg-white px-[64px] py-[56px] shadow-lg dark:bg-gray-900">
+        <div
+          onScroll={showScrollbarBriefly}
+          className="slim-scroll flex-1 overflow-y-auto bg-gray-200 dark:bg-gray-950"
+        >
+          <div className="mx-auto mb-8 min-h-[1056px] w-full max-w-[816px] rounded-sm bg-white px-[64px] pb-[56px] pt-6 shadow-lg dark:bg-gray-900">
             <EditorContent editor={editor} />
           </div>
         </div>
