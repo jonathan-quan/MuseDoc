@@ -1,8 +1,31 @@
 @import "tailwindcss";
 
+/* Enable class-based dark mode: `dark:` utilities respond to `.dark` on <html>. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --background: #f9fafb;
   --foreground: #171717;
+}
+
+.dark {
+  --background: #18181b;
+  --foreground: #e5e7eb;
+
+  /* Neutral "graphite" palette: override the blue-tinted gray scale in dark
+     mode only. Utilities resolve `var(--color-gray-*)`, so this recolors every
+     dark surface at once without touching light mode. */
+  --color-gray-50: #fafafa;
+  --color-gray-100: #f4f4f5;
+  --color-gray-200: #e4e4e7;
+  --color-gray-300: #d4d4d8;
+  --color-gray-400: #a1a1aa;
+  --color-gray-500: #71717a;
+  --color-gray-600: #52525b;
+  --color-gray-700: #43434a;
+  --color-gray-800: #2e2e33;
+  --color-gray-900: #232327;
+  --color-gray-950: #18181b;
 }
 
 @theme inline {
@@ -294,4 +317,51 @@ body {
   float: left;
   height: 0;
   pointer-events: none;
+}
+
+/* ── Dark mode: editor content ───────────────────────────────
+   The editor's rendered prose uses hardcoded colors above; restate
+   them for the dark surface. */
+.dark .editor-content {
+  color: #e5e7eb;
+}
+.dark .editor-content a {
+  color: #60a5fa;
+}
+.dark .editor-content blockquote {
+  border-left-color: #43434a;
+  color: #a1a1aa;
+}
+.dark .editor-content hr {
+  border-top-color: #43434a;
+}
+.dark .editor-content code {
+  background: #2e2e33;
+  color: #e5e7eb;
+}
+.dark .editor-content .editor-frame {
+  border-color: #43434a;
+  background: #1c1c1f;
+}
+.dark .editor-content th,
+.dark .editor-content td {
+  border-color: #43434a;
+}
+.dark .editor-content th {
+  background: #2e2e33;
+}
+.dark .editor-content .doc-image-resize-handle {
+  background: #18181b;
+  border-color: #9aa0a6;
+}
+.dark .editor-content .search-result {
+  background: #92400e;
+  color: #fde68a;
+}
+.dark .editor-content .search-result-current {
+  background: #b45309;
+  color: #fffbeb;
+}
+.dark .editor-content p.is-editor-empty:first-child::before {
+  color: #71717a;
 }

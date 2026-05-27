@@ -36,7 +36,6 @@ type AssistantAction =
 type RequestType =
   | "q_and_a"
   | "edit"
-  | "draft"
   | "summarize"
   | "reason"
   | "tool_action";
@@ -49,10 +48,10 @@ type AssistantResult = {
 };
 
 const allowedModels = new Set([
-  "gpt-5.5",
+  "gpt-5.4-mini",
   "gpt-5.4",
-  "gpt-5.3-chat-latest",
-  "gpt-5.2",
+  "gpt-5.5",
+  "gpt-5.5-pro",
 ]);
 
 function extractText(payload: OpenAIResponse) {
@@ -83,14 +82,14 @@ function attachmentSummary(attachments: Attachment[]) {
 
 const assistantSystemPrompt = [
   "You are MuseDoc's document assistant.",
-  "First classify every user request into exactly one requestType, then behave according to that type.",
-  "Allowed requestType values are q_and_a, edit, draft, summarize, reason, and tool_action.",
+  "First classify every user request into exactly one requestType, then behave according to that type. Read the request carefully and pick the single best-fitting type.",
+  "Allowed requestType values are q_and_a, edit, summarize, reason, and tool_action.",
   "q_and_a: the user asks a question about the current document or general content. Answer in message only. Do not edit or use actions.",
   "edit: the user asks to rewrite, improve, expand, shorten, make more specific, fix grammar, change tone, or otherwise transform existing text. Return a replacement and set applyReplacement true so the user can review it.",
-  "draft: the user asks to create new prose, continue the document, write a section, or generate content that does not directly replace existing text. Return the draft in message, or use insert_text only when they clearly ask to insert it.",
   "summarize: the user asks for a summary, outline, key points, or TLDR. Return message only.",
   "reason: the user asks for analysis, critique, gaps, contradictions, next steps, implications, or decisions. Return message only.",
-  "tool_action: the user asks the editor to create or format document structure, such as tables, highlights, headings, bold, italic, or inserting plain text. Return actions.",
+  "tool_action: the user asks you to add new content to the document or change its structure. This includes generating or writing new prose (such as an email, letter, paragraph, section, list, or outline), continuing the document, and creating tables, highlights, headings, or bold/italic formatting. Always return at least one action.",
+  "Verbs like generate, write, draft, compose, create, produce, and continue mean the user wants new content placed in their document: classify these as tool_action and return an insert_text action whose text is the full generated content. Do not just put the generated content in message.",
   "For tool_action requests, do not ask clarifying questions. Use reasonable defaults and return at least one action.",
   "Use selected editor text as the main target when it is provided.",
   "When no text is selected, use the current paragraph as the edit/format target for phrases like 'this passage', 'this paragraph', or 'this'.",
@@ -102,9 +101,9 @@ const assistantSystemPrompt = [
   "For highlight_matches, choose exact short terms that appear in the document, such as repeated cell values or distinctive shared phrases.",
   "Use format_target for requests like make this bold or italic.",
   "Use set_heading for requests like make this a heading or title.",
-  "Use insert_text for simple insertion requests that do not need review.",
+  "Use insert_text to place generated prose or any new text into the document, such as an email, paragraph, continuation, or new section. Set position to 'end' to append or 'cursor' to insert where the user is working.",
   "For summaries and reasoning, stay grounded in the document and separate direct evidence from inference.",
-  "Return JSON only with this shape: {\"requestType\":\"q_and_a|edit|draft|summarize|reason|tool_action\",\"message\":\"short user-facing response\",\"replacement\":\"replacement text or null\",\"applyReplacement\":true|false,\"actions\":[editor actions]}.",
+  "Return JSON only with this shape: {\"requestType\":\"q_and_a|edit|summarize|reason|tool_action\",\"message\":\"short user-facing response\",\"replacement\":\"replacement text or null\",\"applyReplacement\":true|false,\"actions\":[editor actions]}.",
   "For edit, put only the replacement text in replacement. Do not wrap it in markdown or quotes.",
   "For q_and_a, summarize, and reason, keep replacement null, applyReplacement false, and actions empty.",
   "For tool_action, keep replacement null and applyReplacement false unless a separate edit review is truly needed.",
@@ -156,7 +155,6 @@ function isRequestType(value: unknown): value is RequestType {
   return (
     value === "q_and_a" ||
     value === "edit" ||
-    value === "draft" ||
     value === "summarize" ||
     value === "reason" ||
     value === "tool_action"
@@ -172,13 +170,7 @@ function inferRequestType(message: string): RequestType {
     )
   )
     return "edit";
-  if (
-    /\b(write|draft|generate|create|compose|continue|produce|come up with|give me)\b/.test(
-      t
-    )
-  )
-    return "draft";
-  if (/\b(summari[sz]e|summary|tl;?dr|key points|outline|gist)\b/.test(t))
+  if (/\b(summari[sz]e|summary|tl;?dr|key points|gist)\b/.test(t))
     return "summarize";
   if (
     /\b(analy[sz]e|critique|evaluate|assess|gaps?|contradictions?|implications?|reason|why|how come)\b/.test(
@@ -187,7 +179,9 @@ function inferRequestType(message: string): RequestType {
   )
     return "reason";
   if (
-    /\b(table|highlight|bold|italic|heading|title|insert|format)\b/.test(t)
+    /\b(write|draft|generate|create|compose|continue|produce|come up with|give me|outline|table|highlight|bold|italic|heading|title|insert|format)\b/.test(
+      t
+    )
   )
     return "tool_action";
   return "q_and_a";
