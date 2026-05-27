@@ -42,3 +42,10 @@ next-env.d.ts
 
 # local Claude Code settings
 .claude/
+
+# local dev server logs
+.next-dev.out.log
+.next-dev.err.log
+
+# local sample/import documents
+resume.pdf

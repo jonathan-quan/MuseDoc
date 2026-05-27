@@ -10,6 +10,7 @@ import {
 import {
   Check,
   ChevronDown,
+  MessageSquare,
   Mic,
   Moon,
   Paperclip,
@@ -278,6 +279,7 @@ export default function Home() {
   const [isRecording, setIsRecording] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [theme, setTheme] = useState<"light" | "dark">("light");
+  const [chatOpen, setChatOpen] = useState(true);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<EditorHandle>(null);
@@ -507,23 +509,40 @@ export default function Home() {
             className="ml-1 w-64 rounded-md px-2 py-1 text-sm text-gray-600 outline-none hover:bg-gray-50 focus:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800 dark:focus:bg-gray-800"
           />
         </div>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={theme === "dark"}
-          onClick={toggleTheme}
-          title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-          aria-label="Toggle dark mode"
-          className="relative inline-flex h-7 w-12 shrink-0 items-center rounded-full bg-gray-200 transition-colors dark:bg-gray-700"
-        >
-          <span
-            className={`inline-flex h-5 w-5 items-center justify-center rounded-full bg-white text-gray-600 shadow-sm transition-transform dark:bg-gray-900 dark:text-gray-200 ${
-              theme === "dark" ? "translate-x-6" : "translate-x-1"
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setChatOpen((v) => !v)}
+            title={chatOpen ? "Hide assistant" : "Show assistant"}
+            aria-label={chatOpen ? "Hide assistant" : "Show assistant"}
+            aria-pressed={chatOpen}
+            className={`flex h-7 items-center gap-1.5 rounded-md px-2 text-xs font-medium transition-colors ${
+              chatOpen
+                ? "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200"
+                : "text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
             }`}
           >
-            {theme === "dark" ? <Moon size={12} /> : <Sun size={12} />}
-          </span>
-        </button>
+            <MessageSquare size={14} />
+            Assistant
+          </button>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={theme === "dark"}
+            onClick={toggleTheme}
+            title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            aria-label="Toggle dark mode"
+            className="relative inline-flex h-7 w-12 shrink-0 items-center rounded-full bg-gray-200 transition-colors dark:bg-gray-700"
+          >
+            <span
+              className={`inline-flex h-5 w-5 items-center justify-center rounded-full bg-white text-gray-600 shadow-sm transition-transform dark:bg-gray-900 dark:text-gray-200 ${
+                theme === "dark" ? "translate-x-6" : "translate-x-1"
+              }`}
+            >
+              {theme === "dark" ? <Moon size={12} /> : <Sun size={12} />}
+            </span>
+          </button>
+        </div>
       </header>
 
       <main ref={containerRef} className="flex min-h-0 flex-1">
@@ -579,20 +598,33 @@ export default function Home() {
           )}
         </section>
 
-        <div
-          role="separator"
-          aria-orientation="vertical"
-          title="Drag to resize"
-          onMouseDown={startResize}
-          className="w-1.5 shrink-0 cursor-col-resize bg-gray-200 transition-colors hover:bg-blue-400 dark:bg-gray-800 dark:hover:bg-blue-500"
-        />
+        {chatOpen && (
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            title="Drag to resize"
+            onMouseDown={startResize}
+            className="w-1.5 shrink-0 cursor-col-resize bg-gray-200 transition-colors hover:bg-blue-400 dark:bg-gray-800 dark:hover:bg-blue-500"
+          />
+        )}
 
         <aside
           style={{ width: chatWidth }}
-          className="flex shrink-0 flex-col bg-gray-50 dark:bg-gray-950"
+          className={`shrink-0 flex-col bg-gray-50 dark:bg-gray-950 ${
+            chatOpen ? "flex" : "hidden"
+          }`}
         >
           <div className="flex shrink-0 items-center justify-between gap-3 border-b border-gray-200 px-4 py-3 dark:border-gray-800">
             <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">Assistant</span>
+            <button
+              type="button"
+              onClick={() => setChatOpen(false)}
+              title="Close assistant"
+              aria-label="Close assistant"
+              className="flex h-7 w-7 items-center justify-center rounded-md text-gray-500 hover:bg-gray-200 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
+            >
+              <X size={16} />
+            </button>
           </div>
 
           <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
