@@ -68,6 +68,42 @@ body {
   display: none; /* Chrome / Safari */
 }
 
+/* Slim, rounded scrollbar that fades in only while scrolling (a JS handler
+   toggles `.is-scrolling`), then disappears when idle. */
+.slim-scroll {
+  scrollbar-width: thin; /* Firefox */
+  scrollbar-color: transparent transparent; /* hidden when idle */
+  transition: scrollbar-color 0.4s ease;
+}
+.slim-scroll.is-scrolling {
+  scrollbar-color: rgba(120, 120, 130, 0.5) transparent;
+}
+.slim-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.slim-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.slim-scroll::-webkit-scrollbar-button {
+  display: none; /* no up/down arrows */
+}
+.slim-scroll::-webkit-scrollbar-thumb {
+  background-color: transparent; /* invisible when idle */
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  transition: background-color 0.4s ease;
+}
+.slim-scroll.is-scrolling::-webkit-scrollbar-thumb {
+  background-color: rgba(120, 120, 130, 0.5);
+  background-clip: padding-box;
+}
+.slim-scroll.is-scrolling:hover::-webkit-scrollbar-thumb,
+.slim-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(120, 120, 130, 0.75);
+}
+
 /* ── Editor content (TipTap) ─────────────────────────────────
    Tailwind's reset strips default element styling, so restore it
    inside the editor surface. */
@@ -76,6 +112,11 @@ body {
 }
 .editor-content:focus {
   outline: none;
+}
+/* No leading gap: the first block shouldn't add its own top margin on top of
+   the page's padding. */
+.editor-content > :first-child {
+  margin-top: 0;
 }
 
 .editor-content h1 {
@@ -288,28 +329,44 @@ body {
 
 /* Layout tables: borderless two-column rows (e.g. a title with a right-aligned
    date) produced by document import. They stay editable and reflow, but read
-   like clean PDF rows instead of a grid. */
-.editor-content table.layout-table {
+   like clean PDF rows instead of a grid.
+   Matched two ways: by the `.layout-table` class (preserved in exported HTML),
+   and structurally — a single-row, two-cell table — which always holds in the
+   editor even if the class attribute is dropped by the table node view. */
+.editor-content table.layout-table,
+.editor-content
+  table:has(> tbody > tr:only-child > td:nth-child(2):last-child) {
   table-layout: auto;
 }
 .editor-content table.layout-table th,
 .editor-content table.layout-table td,
-.dark .editor-content table.layout-table th,
-.dark .editor-content table.layout-table td {
+.editor-content
+  table:has(> tbody > tr:only-child > td:nth-child(2):last-child)
+  td {
   border: none;
-  padding: 0;
+  padding: 1px 0;
   min-width: 0;
 }
-.editor-content table.layout-table td:last-child {
+.editor-content table.layout-table td:last-child,
+.editor-content
+  table:has(> tbody > tr:only-child > td:nth-child(2):last-child)
+  td:last-child {
   width: 1%;
   white-space: nowrap;
   text-align: right;
   padding-left: 1.5em;
 }
-.editor-content table.layout-table p {
+.editor-content table.layout-table p,
+.editor-content
+  table:has(> tbody > tr:only-child > td:nth-child(2):last-child)
+  p {
   margin: 0;
 }
-.editor-content .tableWrapper:has(table.layout-table) {
+.editor-content .tableWrapper:has(table.layout-table),
+.editor-content
+  .tableWrapper:has(
+    > table > tbody > tr:only-child > td:nth-child(2):last-child
+  ) {
   overflow-x: visible;
   margin: 0.2em 0;
 }
