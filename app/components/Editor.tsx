@@ -65,6 +65,7 @@ import {
   Mic,
   Printer,
   Download,
+  Upload,
   Plus,
   RemoveFormatting,
   ListTree,
@@ -308,8 +309,8 @@ function TBtn({
       className={[
         "flex h-8 min-w-8 items-center justify-center rounded-md px-1.5",
         active
-          ? "bg-blue-100 text-blue-700"
-          : "text-gray-600 hover:bg-gray-100 hover:text-gray-900",
+          ? "bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300"
+          : "text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-gray-100",
         disabled ? "cursor-not-allowed opacity-40" : "",
       ].join(" ")}
     >
@@ -344,8 +345,8 @@ function CmdBtn({
       className={[
         "flex h-full min-w-[58px] flex-col items-center justify-center gap-1 rounded-md px-2.5 py-1",
         active
-          ? "bg-blue-100 text-blue-700"
-          : "text-gray-600 hover:bg-gray-100 hover:text-gray-900",
+          ? "bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300"
+          : "text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-gray-100",
         disabled ? "cursor-not-allowed opacity-40" : "",
       ].join(" ")}
     >
@@ -357,7 +358,7 @@ function CmdBtn({
 
 /** Full-height vertical separator between toolbar groups. */
 function GroupDivider() {
-  return <span className="mx-1 w-px self-stretch bg-gray-200" />;
+  return <span className="mx-1 w-px self-stretch bg-gray-200 dark:bg-gray-700" />;
 }
 
 /**
@@ -432,13 +433,13 @@ function IconDropdown({
         title={title}
         onMouseDown={(e) => e.preventDefault()}
         onClick={() => setOpen((v) => !v)}
-        className="flex h-8 items-center gap-0.5 rounded-md border border-gray-200 bg-white px-1.5 text-gray-600 hover:bg-gray-50"
+        className="flex h-8 items-center gap-0.5 rounded-md border border-gray-200 bg-white px-1.5 text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
       >
         {icon}
         <ChevronDown size={13} />
       </button>
       <PortalMenu open={open} onClose={() => setOpen(false)} anchorRef={btnRef}>
-        <div className="rounded-md border border-gray-200 bg-white p-1 shadow-lg">
+        <div className="rounded-md border border-gray-200 bg-white p-1 shadow-lg dark:border-gray-700 dark:bg-gray-800">
           {children(() => setOpen(false))}
         </div>
       </PortalMenu>
@@ -447,7 +448,7 @@ function IconDropdown({
 }
 
 const selectClass =
-  "h-8 cursor-pointer rounded-md border border-gray-200 bg-white px-2 text-sm text-gray-600 outline-none hover:bg-gray-50";
+  "h-8 cursor-pointer rounded-md border border-gray-200 bg-white px-2 text-sm text-gray-600 outline-none hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700";
 
 function TableGridPicker({
   onPick,
@@ -458,7 +459,7 @@ function TableGridPicker({
   const MAX_COLS = 10;
   const [hover, setHover] = useState({ rows: 0, cols: 0 });
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-3 shadow-lg">
+    <div className="rounded-lg border border-gray-200 bg-white p-3 shadow-lg dark:border-gray-700 dark:bg-gray-800">
       <div
         className="grid gap-1"
         style={{ gridTemplateColumns: `repeat(${MAX_COLS}, 1rem)` }}
@@ -477,14 +478,14 @@ function TableGridPicker({
               onClick={() => onPick(r, c)}
               className={`h-4 w-4 rounded-[3px] border ${
                 active
-                  ? "border-blue-500 bg-blue-100"
-                  : "border-gray-300 bg-gray-50"
+                  ? "border-blue-500 bg-blue-100 dark:bg-blue-500/30"
+                  : "border-gray-300 bg-gray-50 dark:border-gray-600 dark:bg-gray-700"
               }`}
             />
           );
         })}
       </div>
-      <div className="mt-2 text-center text-xs text-gray-500">
+      <div className="mt-2 text-center text-xs text-gray-500 dark:text-gray-400">
         {hover.rows && hover.cols
           ? `${hover.cols} × ${hover.rows}`
           : "Insert table"}
@@ -517,19 +518,70 @@ type EditorProps = {
   }) => void;
 };
 
-function textToParagraphContent(text: string) {
-  return text
-    .trim()
-    .split(/\n{2,}/)
-    .map((paragraph) => ({
+type InlineContent = { type: "text"; text: string } | { type: "hardBreak" };
+type TextBlockContent =
+  | {
+      type: "paragraph";
+      content?: InlineContent[];
+    }
+  | {
+      type: "heading";
+      attrs: { level: 1 | 2 | 3 };
+      content?: InlineContent[];
+    };
+
+function linesToInlineContent(lines: string[]) {
+  const content = lines.flatMap((line, index) => {
+    const nodes: InlineContent[] = [];
+    if (index > 0) nodes.push({ type: "hardBreak" });
+    if (line) nodes.push({ type: "text", text: line });
+    return nodes;
+  });
+
+  return content.length > 0 ? content : undefined;
+}
+
+function textToEditorContent(text: string) {
+  const blocks: TextBlockContent[] = [];
+  let paragraphLines: string[] = [];
+
+  function flushParagraph() {
+    if (!paragraphLines.some((line) => line.trim())) {
+      paragraphLines = [];
+      return;
+    }
+
+    blocks.push({
       type: "paragraph",
-      content: paragraph.split("\n").flatMap((line, index) => {
-        const content: Array<{ type: string; text?: string }> = [];
-        if (index > 0) content.push({ type: "hardBreak" });
-        if (line) content.push({ type: "text", text: line });
-        return content;
-      }),
-    }));
+      content: linesToInlineContent(paragraphLines),
+    });
+    paragraphLines = [];
+  }
+
+  for (const rawLine of text.trim().split(/\r?\n/)) {
+    const line = rawLine.trimEnd();
+    const headingMatch = /^(#{1,3})\s+(.+)$/.exec(line.trim());
+
+    if (headingMatch) {
+      flushParagraph();
+      blocks.push({
+        type: "heading",
+        attrs: { level: headingMatch[1].length as 1 | 2 | 3 },
+        content: linesToInlineContent([headingMatch[2].trim()]),
+      });
+      continue;
+    }
+
+    if (!line.trim()) {
+      flushParagraph();
+      continue;
+    }
+
+    paragraphLines.push(line);
+  }
+
+  flushParagraph();
+  return blocks;
 }
 
 function tableContent(rows: string[][]) {
@@ -571,6 +623,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
   const recognitionRef = useRef<unknown>(null);
   const findInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
   const tableBtnRef = useRef<HTMLDivElement>(null);
   const insertBtnRef = useRef<HTMLDivElement>(null);
@@ -607,7 +660,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
     editorProps: {
       attributes: {
         class:
-          "editor-content min-h-[60vh] text-[17px] leading-8 text-gray-800 outline-none",
+          "editor-content min-h-[60vh] text-[17px] leading-8 text-gray-800 outline-none dark:text-gray-100",
       },
       handleDOMEvents: {
         contextmenu: (view, event) => {
@@ -643,7 +696,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
         editor
           .chain()
           .focus()
-          .insertContentAt(range, textToParagraphContent(replacement))
+          .insertContentAt(range, textToEditorContent(replacement))
           .run();
       },
       applyAssistantActions(actions: AssistantEditorAction[]) {
@@ -680,7 +733,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
             editor
               .chain()
               .focus()
-              .insertContentAt(insertAt, textToParagraphContent(action.text))
+              .insertContentAt(insertAt, textToEditorContent(action.text))
               .run();
             continue;
           }
@@ -771,7 +824,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
         editor
           .chain()
           .focus()
-          .insertContentAt({ from, to }, textToParagraphContent(replacement))
+          .insertContentAt({ from, to }, textToEditorContent(replacement))
           .run();
       },
     }),
@@ -861,6 +914,36 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
 
   function openImagePicker() {
     imageInputRef.current?.click();
+  }
+
+  // ── Import a document from disk (.txt, .md, .html) ─────
+  function importDocument(e: ChangeEvent<HTMLInputElement>) {
+    if (!editor) return;
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+
+    const hasContent = editor.getText().trim().length > 0;
+    if (
+      hasContent &&
+      !window.confirm("Importing replaces the current document. Continue?")
+    ) {
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onerror = () => window.alert(`Could not read ${file.name}.`);
+    reader.onload = () => {
+      const text = typeof reader.result === "string" ? reader.result : "";
+      const isHtml = file.type === "text/html" || /\.html?$/i.test(file.name);
+      // HTML is parsed by TipTap; plain text / Markdown headings become blocks.
+      editor
+        .chain()
+        .focus()
+        .setContent(isHtml ? text : textToEditorContent(text))
+        .run();
+    };
+    reader.readAsText(file);
   }
 
   function addImageFromFile(e: ChangeEvent<HTMLInputElement>) {
@@ -1047,7 +1130,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
             toolbarRef.current.scrollLeft += e.deltaY;
           }
         }}
-        className="toolbar-scroll flex shrink-0 items-stretch gap-x-1.5 overflow-x-auto border-b border-gray-200 px-3 py-2 [&>*]:shrink-0"
+        className="toolbar-scroll flex shrink-0 items-stretch gap-x-1.5 overflow-x-auto border-b border-gray-200 px-3 py-2 [&>*]:shrink-0 dark:border-gray-800"
       >
         {/* History & view */}
         <div className="flex flex-col justify-center gap-1">
@@ -1194,8 +1277,8 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
                       }}
                       className={`flex h-8 w-8 items-center justify-center rounded ${
                         editor?.isActive({ textAlign: val })
-                          ? "bg-blue-100 text-blue-700"
-                          : "text-gray-600 hover:bg-gray-100"
+                          ? "bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300"
+                          : "text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"
                       }`}
                     >
                       <Ico size={16} />
@@ -1219,7 +1302,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
                         editor?.chain().focus().setLineHeight(s).run();
                         close();
                       }}
-                      className="rounded px-3 py-1 text-left text-sm text-gray-700 hover:bg-gray-100"
+                      className="rounded px-3 py-1 text-left text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
                     >
                       {s}
                     </button>
@@ -1266,7 +1349,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
             {/* Text color */}
             <label
               title="Text color"
-              className="relative flex h-8 min-w-8 cursor-pointer items-center justify-center rounded-md px-1.5 text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+              className="relative flex h-8 min-w-8 cursor-pointer items-center justify-center rounded-md px-1.5 text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-gray-100"
             >
               <Baseline size={16} />
               <input
@@ -1311,7 +1394,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
             {/* Highlight */}
             <label
               title="Highlight color"
-              className="relative flex h-8 min-w-8 cursor-pointer items-center justify-center rounded-md px-1.5 text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+              className="relative flex h-8 min-w-8 cursor-pointer items-center justify-center rounded-md px-1.5 text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-gray-100"
             >
               <Highlighter size={16} />
               <input
@@ -1388,9 +1471,9 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
               onClose={() => setShowInsert(false)}
               anchorRef={insertBtnRef}
             >
-              <div className="w-44 rounded-md border border-gray-200 bg-white py-1 shadow-lg">
+              <div className="w-44 rounded-md border border-gray-200 bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-800">
                 <button
-                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-100"
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
                   onClick={() => {
                     editor?.chain().focus().toggleBlockquote().run();
                     setShowInsert(false);
@@ -1399,7 +1482,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
                   <Quote size={15} /> Quote
                 </button>
                 <button
-                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-100"
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
                   onClick={() => {
                     editor?.chain().focus().toggleFrame().run();
                     setShowInsert(false);
@@ -1408,7 +1491,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
                   <FrameIcon size={15} /> Frame
                 </button>
                 <button
-                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-100"
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
                   onClick={() => {
                     editor?.chain().focus().setHorizontalRule().run();
                     setShowInsert(false);
@@ -1452,8 +1535,22 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
 
         <GroupDivider />
 
-        {/* Output (labeled) */}
+        {/* Import / output (labeled) */}
         <div className="flex items-stretch gap-0.5">
+          <input
+            ref={importInputRef}
+            type="file"
+            accept=".txt,.md,.markdown,.html,.htm,text/plain,text/markdown,text/html"
+            onChange={importDocument}
+            className="hidden"
+          />
+          <CmdBtn
+            title="Import a .txt, .md, or .html file"
+            label="Import"
+            onClick={() => importInputRef.current?.click()}
+          >
+            <Upload size={18} />
+          </CmdBtn>
           <CmdBtn title="Print" label="Print" onClick={printDoc}>
             <Printer size={18} />
           </CmdBtn>
@@ -1472,9 +1569,9 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
               anchorRef={exportBtnRef}
               align="right"
             >
-              <div className="w-44 rounded-md border border-gray-200 bg-white py-1 shadow-lg">
+              <div className="w-44 rounded-md border border-gray-200 bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-800">
                 <button
-                  className="block w-full px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-100"
+                  className="block w-full px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
                   onClick={() => {
                     if (editor)
                       download("document.html", editor.getHTML(), "text/html");
@@ -1484,7 +1581,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
                   Export as HTML
                 </button>
                 <button
-                  className="block w-full px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-100"
+                  className="block w-full px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
                   onClick={() => {
                     if (editor)
                       download("document.txt", editor.getText(), "text/plain");
@@ -1504,7 +1601,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
         imageActive &&
         createPortal(
           <div
-            className="fixed z-[94] flex -translate-x-1/2 items-center gap-1 rounded-md border border-gray-200 bg-white px-1.5 py-1 shadow-lg"
+            className="fixed z-[94] flex -translate-x-1/2 items-center gap-1 rounded-md border border-gray-200 bg-white px-1.5 py-1 shadow-lg dark:border-gray-700 dark:bg-gray-800"
             style={{ left: imageToolbar.x, top: imageToolbar.y }}
             onMouseDown={(e) => e.stopPropagation()}
           >
@@ -1514,8 +1611,8 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
               onClick={() => updateImageAttrs({ fit: "contain", height: null })}
               className={`h-8 rounded px-2 text-xs font-medium ${
                 imageFit === "contain"
-                  ? "bg-blue-50 text-blue-700"
-                  : "text-gray-700 hover:bg-gray-100"
+                  ? "bg-blue-50 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300"
+                  : "text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
               }`}
             >
               Fit
@@ -1532,21 +1629,21 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
               }
               className={`h-8 rounded px-2 text-xs font-medium ${
                 imageFit === "cover"
-                  ? "bg-blue-50 text-blue-700"
-                  : "text-gray-700 hover:bg-gray-100"
+                  ? "bg-blue-50 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300"
+                  : "text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
               }`}
             >
               Crop
             </button>
-            <span className="mx-1 h-5 w-px bg-gray-200" />
+            <span className="mx-1 h-5 w-px bg-gray-200 dark:bg-gray-700" />
             <button
               type="button"
               title="Align left"
               onClick={() => updateImageAttrs({ align: "left" })}
               className={`flex h-8 w-8 items-center justify-center rounded ${
                 imageAlign === "left"
-                  ? "bg-blue-50 text-blue-700"
-                  : "text-gray-700 hover:bg-gray-100"
+                  ? "bg-blue-50 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300"
+                  : "text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
               }`}
             >
               <AlignLeft size={15} />
@@ -1557,8 +1654,8 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
               onClick={() => updateImageAttrs({ align: "center" })}
               className={`flex h-8 w-8 items-center justify-center rounded ${
                 imageAlign === "center"
-                  ? "bg-blue-50 text-blue-700"
-                  : "text-gray-700 hover:bg-gray-100"
+                  ? "bg-blue-50 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300"
+                  : "text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
               }`}
             >
               <AlignCenter size={15} />
@@ -1569,18 +1666,18 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
               onClick={() => updateImageAttrs({ align: "right" })}
               className={`flex h-8 w-8 items-center justify-center rounded ${
                 imageAlign === "right"
-                  ? "bg-blue-50 text-blue-700"
-                  : "text-gray-700 hover:bg-gray-100"
+                  ? "bg-blue-50 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300"
+                  : "text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
               }`}
             >
               <AlignRight size={15} />
             </button>
-            <span className="mx-1 h-5 w-px bg-gray-200" />
+            <span className="mx-1 h-5 w-px bg-gray-200 dark:bg-gray-700" />
             <button
               type="button"
               title="Image options"
               onClick={openImageOptions}
-              className="h-8 rounded px-2 text-xs font-medium text-gray-700 hover:bg-gray-100"
+              className="h-8 rounded px-2 text-xs font-medium text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
             >
               Options
             </button>
@@ -1588,7 +1685,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
               type="button"
               title="Reset image"
               onClick={resetImageAttrs}
-              className="h-8 rounded px-2 text-xs font-medium text-gray-700 hover:bg-gray-100"
+              className="h-8 rounded px-2 text-xs font-medium text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
             >
               Reset
             </button>
@@ -1609,19 +1706,19 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
               }}
             />
             <div
-              className="fixed z-[96] w-64 rounded-md border border-gray-200 bg-white p-3 text-xs text-gray-600 shadow-xl"
+              className="fixed z-[96] w-64 rounded-md border border-gray-200 bg-white p-3 text-xs text-gray-600 shadow-xl dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
               style={{ left: imageMenu.x, top: imageMenu.y }}
               onMouseDown={(e) => e.stopPropagation()}
             >
               <div className="mb-3 flex items-center justify-between">
-                <span className="text-sm font-semibold text-gray-900">
+                <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
                   Image options
                 </span>
                 <button
                   type="button"
                   title="Close"
                   onClick={() => setImageMenu(null)}
-                  className="flex h-7 w-7 items-center justify-center rounded text-gray-500 hover:bg-gray-100"
+                  className="flex h-7 w-7 items-center justify-center rounded text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
                 >
                   <X size={15} />
                 </button>
@@ -1664,7 +1761,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
                         : { fit: e.target.value as ImageFit }
                     )
                   }
-                  className="h-8 w-full rounded border border-gray-300 bg-white px-2"
+                  className="h-8 w-full rounded border border-gray-300 bg-white px-2 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
                 >
                   <option value="contain">Fit whole image</option>
                   <option value="cover">Crop to box</option>
@@ -1674,7 +1771,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
 
               <div className="mb-3 grid grid-cols-2 gap-3">
                 <label>
-                  <span className="mb-1 block font-medium text-gray-700">
+                  <span className="mb-1 block font-medium text-gray-700 dark:text-gray-300">
                     Crop X
                   </span>
                   <input
@@ -1690,7 +1787,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
                   />
                 </label>
                 <label>
-                  <span className="mb-1 block font-medium text-gray-700">
+                  <span className="mb-1 block font-medium text-gray-700 dark:text-gray-300">
                     Crop Y
                   </span>
                   <input
@@ -1739,11 +1836,11 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
                 />
               </label>
 
-              <div className="flex justify-end gap-2 border-t border-gray-100 pt-3">
+              <div className="flex justify-end gap-2 border-t border-gray-100 pt-3 dark:border-gray-700">
                 <button
                   type="button"
                   onClick={resetImageAttrs}
-                  className="h-8 rounded border border-gray-300 bg-white px-3 text-gray-700 hover:bg-gray-100"
+                  className="h-8 rounded border border-gray-300 bg-white px-3 text-gray-700 hover:bg-gray-100 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-700"
                 >
                   Reset
                 </button>
@@ -1754,7 +1851,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
         )}
 
       {showFind && (
-        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-gray-200 bg-gray-50 px-3 py-2">
+        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-gray-900">
           <input
             ref={findInputRef}
             placeholder="Find"
@@ -1768,9 +1865,9 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
                   .run();
               }
             }}
-            className="h-8 w-44 rounded border border-gray-300 bg-white px-2 text-sm outline-none focus:border-blue-400"
+            className="h-8 w-44 rounded border border-gray-300 bg-white px-2 text-sm outline-none focus:border-blue-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
           />
-          <span className="min-w-14 text-xs text-gray-500">
+          <span className="min-w-14 text-xs text-gray-500 dark:text-gray-400">
             {matchCount ? `${currentMatch} / ${matchCount}` : "No results"}
           </span>
           <TBtn
@@ -1795,26 +1892,26 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
               setReplaceValue(e.target.value);
               editor?.chain().setReplaceTerm(e.target.value).run();
             }}
-            className="h-8 w-44 rounded border border-gray-300 bg-white px-2 text-sm outline-none focus:border-blue-400"
+            className="h-8 w-44 rounded border border-gray-300 bg-white px-2 text-sm outline-none focus:border-blue-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
           />
           <button
             disabled={!matchCount}
             onClick={() => editor?.chain().focus().replaceCurrent().run()}
-            className="h-8 rounded border border-gray-300 bg-white px-2 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-40"
+            className="h-8 rounded border border-gray-300 bg-white px-2 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-40 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
           >
             Replace
           </button>
           <button
             disabled={!matchCount}
             onClick={() => editor?.chain().focus().replaceAll().run()}
-            className="h-8 rounded border border-gray-300 bg-white px-2 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-40"
+            className="h-8 rounded border border-gray-300 bg-white px-2 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-40 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
           >
             Replace all
           </button>
           <button
             title="Close"
             onClick={() => setShowFind(false)}
-            className="ml-auto flex h-8 w-8 items-center justify-center rounded text-gray-500 hover:bg-gray-200"
+            className="ml-auto flex h-8 w-8 items-center justify-center rounded text-gray-500 hover:bg-gray-200 dark:text-gray-400 dark:hover:bg-gray-700"
           >
             <X size={16} />
           </button>
@@ -1824,12 +1921,12 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
       {/* ── Body: outline + writing surface ───────────────── */}
       <div className="flex min-h-0 flex-1">
         {showOutline && (
-          <nav className="w-56 shrink-0 overflow-y-auto border-r border-gray-100 bg-gray-50/60 px-3 py-4">
-            <div className="mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-gray-400">
+          <nav className="w-56 shrink-0 overflow-y-auto border-r border-gray-100 bg-gray-50/60 px-3 py-4 dark:border-gray-800 dark:bg-gray-900/40">
+            <div className="mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
               Outline
             </div>
             {headings.length === 0 ? (
-              <p className="px-1 text-xs text-gray-400">
+              <p className="px-1 text-xs text-gray-400 dark:text-gray-500">
                 Add headings to build an outline.
               </p>
             ) : (
@@ -1846,7 +1943,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
                           .run()
                       }
                       style={{ paddingLeft: `${(h.level - 1) * 12 + 6}px` }}
-                      className="block w-full truncate rounded py-1 pr-1.5 text-left text-sm text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                      className="block w-full truncate rounded py-1 pr-1.5 text-left text-sm text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
                     >
                       {h.text}
                     </button>

@@ -1,16 +1,21 @@
 "use client";
 
 import {
+  useEffect,
   useRef,
   useState,
   type ChangeEvent,
   type MouseEvent as ReactMouseEvent,
 } from "react";
 import {
+  Check,
+  ChevronDown,
   Mic,
+  Moon,
   Paperclip,
   SendHorizontal,
   Square,
+  Sun,
   X,
 } from "lucide-react";
 import Editor, {
@@ -31,12 +36,11 @@ type Attachment = {
   content: string;
   kind: "text" | "image" | "unsupported";
 };
-type OpenAIModel = "gpt-5.5" | "gpt-5.4" | "gpt-5.3-chat-latest" | "gpt-5.2";
+type OpenAIModel = "gpt-5.4-mini" | "gpt-5.4" | "gpt-5.5" | "gpt-5.5-pro";
 type TextRange = { from: number; to: number };
 type RequestType =
   | "q_and_a"
   | "edit"
-  | "draft"
   | "summarize"
   | "reason"
   | "tool_action";
@@ -46,17 +50,90 @@ type PendingReview = {
   range: TextRange | null;
 };
 
-const modelOptions: { label: string; value: OpenAIModel }[] = [
-  { label: "GPT-5.5", value: "gpt-5.5" },
-  { label: "GPT-5.4", value: "gpt-5.4" },
-  { label: "GPT-5.3 Chat", value: "gpt-5.3-chat-latest" },
-  { label: "GPT-5.2", value: "gpt-5.2" },
+const modelOptions: {
+  label: string;
+  value: OpenAIModel;
+  descriptor: string;
+}[] = [
+  { label: "GPT-5.4 Mini", value: "gpt-5.4-mini", descriptor: "Free" },
+  { label: "GPT-5.4", value: "gpt-5.4", descriptor: "Plus" },
+  { label: "GPT-5.5", value: "gpt-5.5", descriptor: "Plus" },
+  { label: "GPT-5.5 Pro", value: "gpt-5.5-pro", descriptor: "Pro" },
 ];
+
+function ModelPicker({
+  model,
+  onChange,
+}: {
+  model: OpenAIModel;
+  onChange: (model: OpenAIModel) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const current =
+    modelOptions.find((option) => option.value === model) ?? modelOptions[0];
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        aria-label="OpenAI model"
+        onClick={() => setOpen((v) => !v)}
+        className="flex h-8 items-center gap-1 rounded-full px-2 text-xs font-medium text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
+      >
+        {current.label}
+        <ChevronDown
+          size={13}
+          className={`transition-transform ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+      {open && (
+        <>
+          <div
+            className="fixed inset-0 z-40"
+            onMouseDown={() => setOpen(false)}
+          />
+          <div className="absolute bottom-full left-0 z-50 mb-2 w-56 overflow-hidden rounded-xl border border-gray-200 bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-800">
+            {modelOptions.map((option) => {
+              const active = option.value === model;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => {
+                    onChange(option.value);
+                    setOpen(false);
+                  }}
+                  className="flex w-full items-center justify-between gap-6 px-3.5 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700"
+                >
+                  <span
+                    className={`text-sm ${
+                      active
+                        ? "font-semibold text-gray-900 dark:text-gray-100"
+                        : "font-medium text-gray-700 dark:text-gray-300"
+                    }`}
+                  >
+                    {option.label}
+                  </span>
+                  {active ? (
+                    <Check size={16} className="shrink-0 text-gray-900 dark:text-gray-100" />
+                  ) : (
+                    <span className="shrink-0 text-xs text-gray-400 dark:text-gray-500">
+                      {option.descriptor}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
 const requestTypeLabels: Record<RequestType, string> = {
   q_and_a: "Q&A",
   edit: "Edit",
-  draft: "Draft",
   summarize: "Summary",
   reason: "Reasoning",
   tool_action: "Action",
@@ -128,7 +205,7 @@ function DiffText({
   side: "original" | "proposed";
 }) {
   return (
-    <p className="whitespace-pre-wrap text-sm leading-7 text-gray-800">
+    <p className="whitespace-pre-wrap text-sm leading-7 text-gray-800 dark:text-gray-100">
       {parts.map((part, index) => {
         if (part.type === "insert" && side === "original") return null;
         if (part.type === "delete" && side === "proposed") return null;
@@ -136,7 +213,7 @@ function DiffText({
           return (
             <mark
               key={index}
-              className="rounded bg-red-100 px-0.5 text-red-800 line-through decoration-red-500"
+              className="rounded bg-red-100 px-0.5 text-red-800 line-through decoration-red-500 dark:bg-red-500/25 dark:text-red-200"
             >
               {part.text}
             </mark>
@@ -146,7 +223,7 @@ function DiffText({
           return (
             <mark
               key={index}
-              className="rounded bg-green-100 px-0.5 text-green-900"
+              className="rounded bg-green-100 px-0.5 text-green-900 dark:bg-green-500/25 dark:text-green-200"
             >
               {part.text}
             </mark>
@@ -187,7 +264,7 @@ function readFile(file: File): Promise<Attachment> {
 export default function Home() {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [input, setInput] = useState("");
-  const [model, setModel] = useState<OpenAIModel>("gpt-5.5");
+  const [model, setModel] = useState<OpenAIModel>("gpt-5.4-mini");
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [documentContext, setDocumentContext] = useState({
     text: "",
@@ -200,6 +277,7 @@ export default function Home() {
   const [isSending, setIsSending] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+  const [theme, setTheme] = useState<"light" | "dark">("light");
 
   const containerRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<EditorHandle>(null);
@@ -207,6 +285,27 @@ export default function Home() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const [chatWidth, setChatWidth] = useState(384);
+
+  // Sync the toggle's icon with the theme the pre-paint script already applied.
+  // Both server and first client render start as "light", so this only ever
+  // corrects the icon after mount — no hydration mismatch.
+  useEffect(() => {
+    const stored = window.localStorage.getItem("musedoc-theme");
+    const prefersDark = window.matchMedia(
+      "(prefers-color-scheme: dark)"
+    ).matches;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setTheme(stored === "dark" || (!stored && prefersDark) ? "dark" : "light");
+  }, []);
+
+  function toggleTheme() {
+    setTheme((prev) => {
+      const next = prev === "dark" ? "light" : "dark";
+      document.documentElement.classList.toggle("dark", next === "dark");
+      window.localStorage.setItem("musedoc-theme", next);
+      return next;
+    });
+  }
 
   function startResize(e: ReactMouseEvent) {
     e.preventDefault();
@@ -394,33 +493,50 @@ export default function Home() {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex shrink-0 items-center justify-between border-b border-gray-200 bg-white px-6 py-3">
+      <header className="flex shrink-0 items-center justify-between border-b border-gray-200 bg-white px-6 py-3 dark:border-gray-800 dark:bg-gray-900">
         <div className="flex items-center gap-2">
-          <span className="text-lg font-semibold tracking-tight text-gray-900">
+          <span className="text-lg font-semibold tracking-tight text-gray-900 dark:text-gray-100">
             MuseDoc
           </span>
-          <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-gray-500">
+          <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-gray-500 dark:bg-gray-800 dark:text-gray-400">
             draft
           </span>
+          <input
+            aria-label="Document title"
+            defaultValue="Untitled document"
+            className="ml-1 w-64 rounded-md px-2 py-1 text-sm text-gray-600 outline-none hover:bg-gray-50 focus:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800 dark:focus:bg-gray-800"
+          />
         </div>
-        <input
-          aria-label="Document title"
-          defaultValue="Untitled document"
-          className="w-64 rounded-md px-2 py-1 text-center text-sm text-gray-600 outline-none hover:bg-gray-50 focus:bg-gray-50"
-        />
+        <button
+          type="button"
+          role="switch"
+          aria-checked={theme === "dark"}
+          onClick={toggleTheme}
+          title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          aria-label="Toggle dark mode"
+          className="relative inline-flex h-7 w-12 shrink-0 items-center rounded-full bg-gray-200 transition-colors dark:bg-gray-700"
+        >
+          <span
+            className={`inline-flex h-5 w-5 items-center justify-center rounded-full bg-white text-gray-600 shadow-sm transition-transform dark:bg-gray-900 dark:text-gray-200 ${
+              theme === "dark" ? "translate-x-6" : "translate-x-1"
+            }`}
+          >
+            {theme === "dark" ? <Moon size={12} /> : <Sun size={12} />}
+          </span>
+        </button>
       </header>
 
       <main ref={containerRef} className="flex min-h-0 flex-1">
-        <section className="relative flex min-w-0 flex-1 flex-col bg-white">
+        <section className="relative flex min-w-0 flex-1 flex-col bg-white dark:bg-gray-900">
           <Editor ref={editorRef} onDocumentChange={setDocumentContext} />
           {pendingReview && (
-            <div className="absolute inset-0 z-30 flex flex-col bg-white">
-              <div className="flex shrink-0 items-center justify-between gap-4 border-b border-gray-200 px-5 py-3">
+            <div className="absolute inset-0 z-30 flex flex-col bg-white dark:bg-gray-900">
+              <div className="flex shrink-0 items-center justify-between gap-4 border-b border-gray-200 px-5 py-3 dark:border-gray-800">
                 <div>
-                  <h2 className="text-sm font-semibold text-gray-900">
+                  <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
                     Review suggested edit
                   </h2>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
                     Compare the current text with the assistant&apos;s version.
                   </p>
                 </div>
@@ -428,22 +544,22 @@ export default function Home() {
                   <button
                     type="button"
                     onClick={rejectReview}
-                    className="h-9 rounded-md border border-gray-300 bg-white px-3 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                    className="h-9 rounded-md border border-gray-300 bg-white px-3 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
                   >
                     Reject
                   </button>
                   <button
                     type="button"
                     onClick={acceptReview}
-                    className="h-9 rounded-md bg-gray-900 px-3 text-sm font-medium text-white hover:bg-gray-800"
+                    className="h-9 rounded-md bg-gray-900 px-3 text-sm font-medium text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white"
                   >
                     Accept
                   </button>
                 </div>
               </div>
-              <div className="grid min-h-0 flex-1 grid-cols-1 divide-y divide-gray-200 overflow-hidden lg:grid-cols-2 lg:divide-x lg:divide-y-0">
+              <div className="grid min-h-0 flex-1 grid-cols-1 divide-y divide-gray-200 overflow-hidden lg:grid-cols-2 lg:divide-x lg:divide-y-0 dark:divide-gray-800">
                 <section className="flex min-h-0 flex-col">
-                  <div className="shrink-0 border-b border-gray-200 bg-red-50 px-4 py-2 text-xs font-semibold uppercase text-red-700">
+                  <div className="shrink-0 border-b border-gray-200 bg-red-50 px-4 py-2 text-xs font-semibold uppercase text-red-700 dark:border-gray-800 dark:bg-red-950 dark:text-red-300">
                     Original
                   </div>
                   <div className="min-h-0 flex-1 overflow-auto p-5">
@@ -451,7 +567,7 @@ export default function Home() {
                   </div>
                 </section>
                 <section className="flex min-h-0 flex-col">
-                  <div className="shrink-0 border-b border-gray-200 bg-green-50 px-4 py-2 text-xs font-semibold uppercase text-green-700">
+                  <div className="shrink-0 border-b border-gray-200 bg-green-50 px-4 py-2 text-xs font-semibold uppercase text-green-700 dark:border-gray-800 dark:bg-green-950 dark:text-green-300">
                     Proposed
                   </div>
                   <div className="min-h-0 flex-1 overflow-auto p-5">
@@ -468,15 +584,15 @@ export default function Home() {
           aria-orientation="vertical"
           title="Drag to resize"
           onMouseDown={startResize}
-          className="w-1.5 shrink-0 cursor-col-resize bg-gray-200 transition-colors hover:bg-blue-400"
+          className="w-1.5 shrink-0 cursor-col-resize bg-gray-200 transition-colors hover:bg-blue-400 dark:bg-gray-800 dark:hover:bg-blue-500"
         />
 
         <aside
           style={{ width: chatWidth }}
-          className="flex shrink-0 flex-col bg-gray-50"
+          className="flex shrink-0 flex-col bg-gray-50 dark:bg-gray-950"
         >
-          <div className="flex shrink-0 items-center justify-between gap-3 border-b border-gray-200 px-4 py-3">
-            <span className="text-sm font-semibold text-gray-900">Assistant</span>
+          <div className="flex shrink-0 items-center justify-between gap-3 border-b border-gray-200 px-4 py-3 dark:border-gray-800">
+            <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">Assistant</span>
           </div>
 
           <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
@@ -490,15 +606,15 @@ export default function Home() {
                 }
               >
                 {m.role === "assistant" && m.requestType && (
-                  <span className="ml-1 rounded bg-gray-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                  <span className="ml-1 rounded bg-gray-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:bg-gray-800 dark:text-gray-400">
                     {requestTypeLabels[m.requestType]}
                   </span>
                 )}
                 <div
                   className={
                     m.role === "user"
-                      ? "max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-sm bg-gray-900 px-3.5 py-2 text-sm text-white"
-                      : "max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-bl-sm bg-white px-3.5 py-2 text-sm text-gray-800 shadow-sm ring-1 ring-gray-200"
+                      ? "max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-sm bg-gray-900 px-3.5 py-2 text-sm text-white dark:bg-gray-200 dark:text-gray-900"
+                      : "max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-bl-sm bg-white px-3.5 py-2 text-sm text-gray-800 shadow-sm ring-1 ring-gray-200 dark:bg-gray-800 dark:text-gray-100 dark:ring-gray-700"
                   }
                 >
                   {m.content}
@@ -506,17 +622,17 @@ export default function Home() {
               </div>
             ))}
             {isSending && (
-              <div className="text-xs font-medium text-gray-400">Thinking...</div>
+              <div className="text-xs font-medium text-gray-400 dark:text-gray-500">Thinking...</div>
             )}
           </div>
 
-          <div className="shrink-0 border-t border-gray-200 bg-gray-50 p-3">
+          <div className="shrink-0 border-t border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-950">
             {attachments.length > 0 && (
               <div className="mb-2 flex flex-wrap gap-1.5">
                 {attachments.map((file) => (
                   <span
                     key={file.id}
-                    className="flex max-w-full items-center gap-1 rounded-full border border-gray-300 bg-white px-2 py-1 text-xs text-gray-600"
+                    className="flex max-w-full items-center gap-1 rounded-full border border-gray-300 bg-white px-2 py-1 text-xs text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
                     title={file.name}
                   >
                     <span className="max-w-36 truncate">{file.name}</span>
@@ -528,7 +644,7 @@ export default function Home() {
                           prev.filter((item) => item.id !== file.id)
                         )
                       }
-                      className="text-gray-400 hover:text-gray-700"
+                      className="text-gray-400 hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200"
                     >
                       <X size={13} />
                     </button>
@@ -537,7 +653,7 @@ export default function Home() {
               </div>
             )}
 
-            {status && <div className="mb-2 text-xs text-gray-500">{status}</div>}
+            {status && <div className="mb-2 text-xs text-gray-500 dark:text-gray-400">{status}</div>}
 
             <input
               ref={fileInputRef}
@@ -547,7 +663,7 @@ export default function Home() {
               className="hidden"
             />
 
-            <div className="rounded-[1.35rem] border border-gray-300 bg-white px-3 py-2 shadow-sm focus-within:border-gray-400 focus-within:shadow">
+            <div className="rounded-[1.35rem] border border-gray-300 bg-white px-3 py-2 shadow-sm focus-within:border-gray-400 focus-within:shadow dark:border-gray-700 dark:bg-gray-800 dark:focus-within:border-gray-600">
               <textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
@@ -559,14 +675,14 @@ export default function Home() {
                 }}
                 rows={2}
                 placeholder="Ask the assistant..."
-                className="max-h-32 min-h-12 w-full resize-none bg-transparent px-1 py-1 text-sm text-gray-800 outline-none placeholder:text-gray-400"
+                className="max-h-32 min-h-12 w-full resize-none bg-transparent px-1 py-1 text-sm text-gray-800 outline-none placeholder:text-gray-400 dark:text-gray-100 dark:placeholder:text-gray-500"
               />
               <div className="mt-1 flex items-center gap-2">
                 <button
                   type="button"
                   title="Attach files"
                   onClick={() => fileInputRef.current?.click()}
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100 hover:text-gray-800"
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-100"
                 >
                   <Paperclip size={17} />
                 </button>
@@ -576,30 +692,19 @@ export default function Home() {
                   onClick={toggleRecording}
                   className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
                     isRecording
-                      ? "bg-red-50 text-red-600"
-                      : "text-gray-500 hover:bg-gray-100 hover:text-gray-800"
+                      ? "bg-red-50 text-red-600 dark:bg-red-950 dark:text-red-400"
+                      : "text-gray-500 hover:bg-gray-100 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-100"
                   }`}
                 >
                   {isRecording ? <Square size={15} /> : <Mic size={17} />}
                 </button>
-                <select
-                  aria-label="OpenAI model"
-                  value={model}
-                  onChange={(e) => setModel(e.target.value as OpenAIModel)}
-                  className="h-8 min-w-0 rounded-full border border-transparent bg-transparent px-2 text-xs font-medium text-gray-600 outline-none hover:bg-gray-100"
-                >
-                  {modelOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-                <span className="hidden text-xs text-gray-400 sm:inline">
+                <ModelPicker model={model} onChange={setModel} />
+                <span className="hidden text-xs text-gray-400 sm:inline dark:text-gray-500">
                   OpenAI
                 </span>
                 {documentContext.selectionText.trim() && (
                   <span
-                    className="hidden max-w-24 truncate text-xs font-medium text-gray-400 md:inline"
+                    className="hidden max-w-24 truncate text-xs font-medium text-gray-400 md:inline dark:text-gray-500"
                     title="Selected text will be used first"
                   >
                     Selection
@@ -610,7 +715,7 @@ export default function Home() {
                   title="Send"
                   onClick={() => void sendMessage()}
                   disabled={!input.trim() || isSending}
-                  className="ml-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-900 text-white disabled:cursor-not-allowed disabled:opacity-40"
+                  className="ml-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-900 text-white disabled:cursor-not-allowed disabled:opacity-40 dark:bg-gray-100 dark:text-gray-900"
                 >
                   <SendHorizontal size={17} />
                 </button>
