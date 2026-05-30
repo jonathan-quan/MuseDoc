@@ -8,6 +8,7 @@ import {
   type MouseEvent as ReactMouseEvent,
 } from "react";
 import {
+  ArrowLeft,
   Check,
   ChevronDown,
   MessageSquare,
@@ -23,6 +24,16 @@ import Editor, {
   type AssistantEditorAction,
   type EditorHandle,
 } from "./components/Editor";
+import Drive from "./components/Drive";
+import {
+  createDocument,
+  deleteDocument,
+  getDocument,
+  listDocuments,
+  updateDocument,
+  UNTITLED,
+  type StoredDocument,
+} from "./lib/documents";
 
 type ChatMessage = {
   role: "user" | "assistant";
@@ -46,9 +57,11 @@ type RequestType =
   | "reason"
   | "tool_action";
 type PendingReview = {
+  // `find` is the exact text located in the document; `replacement` is the
+  // new text it will become. `original` is shown in the diff (same as find).
   original: string;
   replacement: string;
-  range: TextRange | null;
+  find: string;
 };
 
 const modelOptions: {
@@ -281,6 +294,15 @@ export default function Home() {
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [chatOpen, setChatOpen] = useState(true);
 
+  // Persistence: the Drive home lists every saved document; opening one swaps
+  // this page into the editor for that document. Documents live in
+  // localStorage (see lib/documents.ts).
+  const [documents, setDocuments] = useState<StoredDocument[]>([]);
+  const [view, setView] = useState<"drive" | "editor">("drive");
+  const [currentDocId, setCurrentDocId] = useState<string | null>(null);
+  const [title, setTitle] = useState(UNTITLED);
+  const currentDoc = documents.find((doc) => doc.id === currentDocId) ?? null;
+
   const containerRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<EditorHandle>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -307,6 +329,79 @@ export default function Home() {
       window.localStorage.setItem("musedoc-theme", next);
       return next;
     });
+  }
+
+  // Load the stored document list once on mount.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setDocuments(listDocuments());
+  }, []);
+
+  // Autosave the open document. Debounced so we don't write to localStorage on
+  // every keystroke. We persist the editor's HTML (reloaded on reopen) plus a
+  // plain-text snapshot (used for previews and search) and the current title.
+  useEffect(() => {
+    if (view !== "editor" || !currentDocId) return;
+    const id = currentDocId;
+    const timer = window.setTimeout(() => {
+      updateDocument(id, {
+        title: title.trim() || UNTITLED,
+        html: documentContext.html,
+        text: documentContext.text,
+      });
+      setDocuments(listDocuments());
+    }, 600);
+    return () => window.clearTimeout(timer);
+  }, [view, currentDocId, title, documentContext.html, documentContext.text]);
+
+  function openDocument(id: string) {
+    const doc = getDocument(id);
+    if (!doc) return;
+    setCurrentDocId(doc.id);
+    setTitle(doc.title);
+    setMessages(initialMessages);
+    setPendingReview(null);
+    setStatus(null);
+    setView("editor");
+  }
+
+  function handleCreateDocument() {
+    const doc = createDocument();
+    setDocuments(listDocuments());
+    openDocument(doc.id);
+  }
+
+  function handleRenameDocument(id: string, nextTitle: string) {
+    updateDocument(id, { title: nextTitle });
+    setDocuments(listDocuments());
+    if (id === currentDocId) setTitle(nextTitle);
+  }
+
+  function handleDeleteDocument(id: string) {
+    deleteDocument(id);
+    setDocuments(listDocuments());
+    if (id === currentDocId) backToDrive();
+  }
+
+  function handleToggleStar(id: string) {
+    const doc = getDocument(id);
+    if (!doc) return;
+    updateDocument(id, { starred: !doc.starred });
+    setDocuments(listDocuments());
+  }
+
+  function backToDrive() {
+    // Flush any pending edits immediately so the Drive preview is current.
+    if (currentDocId) {
+      updateDocument(currentDocId, {
+        title: title.trim() || UNTITLED,
+        html: documentContext.html,
+        text: documentContext.text,
+      });
+    }
+    setDocuments(listDocuments());
+    setCurrentDocId(null);
+    setView("drive");
   }
 
   function startResize(e: ReactMouseEvent) {
@@ -369,23 +464,23 @@ export default function Home() {
       const payload = (await response.json()) as {
         requestType?: RequestType;
         message?: string;
-        edit?: { replacement?: string };
+        edit?: { find?: string; replace?: string };
         actions?: AssistantEditorAction[];
         error?: string;
       };
       if (!response.ok) throw new Error(payload.error ?? "OpenAI request failed.");
+      const editFind = payload.edit?.find;
       const hasEdit =
-        payload.requestType === "edit" && Boolean(payload.edit?.replacement);
+        payload.requestType === "edit" &&
+        typeof editFind === "string" &&
+        editFind.length > 0;
       const actions =
         payload.requestType === "tool_action" ? payload.actions ?? [] : [];
-      if (payload.edit?.replacement) {
-        const original =
-          documentContext.selectionText.trim() ||
-          documentContext.currentBlockText.trim();
+      if (hasEdit && editFind) {
         setPendingReview({
-          original,
-          replacement: payload.edit.replacement,
-          range: documentContext.targetRange,
+          original: editFind,
+          replacement: payload.edit?.replace ?? "",
+          find: editFind,
         });
       }
       if (actions.length > 0 && !hasEdit) {
@@ -419,11 +514,13 @@ export default function Home() {
 
   function acceptReview() {
     if (!pendingReview) return;
-    if (pendingReview.range) {
-      editorRef.current?.replaceRange(pendingReview.range, pendingReview.replacement);
-    } else {
-      editorRef.current?.replaceSelectionOrCurrentBlock(
-        pendingReview.replacement
+    const applied = editorRef.current?.replaceText(
+      pendingReview.find,
+      pendingReview.replacement
+    );
+    if (applied === false) {
+      setStatus(
+        "Couldn't locate the exact text to edit — it may have changed. Try selecting the text, then ask again."
       );
     }
     setPendingReview(null);
@@ -493,19 +590,42 @@ export default function Home() {
     }
   }
 
+  if (view === "drive") {
+    return (
+      <Drive
+        documents={documents}
+        onOpen={openDocument}
+        onCreate={handleCreateDocument}
+        onRename={handleRenameDocument}
+        onDelete={handleDeleteDocument}
+        onToggleStar={handleToggleStar}
+        theme={theme}
+        onToggleTheme={toggleTheme}
+      />
+    );
+  }
+
   return (
     <div className="flex h-full flex-col">
       <header className="flex shrink-0 items-center justify-between border-b border-gray-200 bg-white px-6 py-3 dark:border-gray-800 dark:bg-gray-900">
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={backToDrive}
+            title="Back to MuseDoc"
+            aria-label="Back to MuseDoc"
+            className="flex h-8 w-8 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
+          >
+            <ArrowLeft size={18} />
+          </button>
           <span className="text-lg font-semibold tracking-tight text-gray-900 dark:text-gray-100">
             MuseDoc
           </span>
-          <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-gray-500 dark:bg-gray-800 dark:text-gray-400">
-            draft
-          </span>
           <input
             aria-label="Document title"
-            defaultValue="Untitled document"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder={UNTITLED}
             className="ml-1 w-64 rounded-md px-2 py-1 text-sm text-gray-600 outline-none hover:bg-gray-50 focus:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800 dark:focus:bg-gray-800"
           />
         </div>
@@ -547,7 +667,12 @@ export default function Home() {
 
       <main ref={containerRef} className="flex min-h-0 flex-1">
         <section className="relative flex min-w-0 flex-1 flex-col bg-white dark:bg-gray-900">
-          <Editor ref={editorRef} onDocumentChange={setDocumentContext} />
+          <Editor
+            key={currentDocId ?? "none"}
+            ref={editorRef}
+            initialContent={currentDoc?.html}
+            onDocumentChange={setDocumentContext}
+          />
           {pendingReview && (
             <div className="absolute inset-0 z-30 flex flex-col bg-white dark:bg-gray-900">
               <div className="flex shrink-0 items-center justify-between gap-4 border-b border-gray-200 px-5 py-3 dark:border-gray-800">

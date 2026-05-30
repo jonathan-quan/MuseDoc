@@ -42,8 +42,10 @@ type RequestType =
 type AssistantResult = {
   requestType?: RequestType;
   message?: string;
-  replacement?: string | null;
-  applyReplacement?: boolean;
+  // Targeted edit: `find` is exact text from the document, `replace` is the
+  // new text (empty string deletes it).
+  find?: string | null;
+  replace?: string | null;
   actions?: unknown[];
 };
 
@@ -85,15 +87,16 @@ const assistantSystemPrompt = [
   "First classify every user request into exactly one requestType, then behave according to that type. Read the request carefully and pick the single best-fitting type.",
   "Allowed requestType values are q_and_a, edit, summarize, reason, and tool_action.",
   "q_and_a: the user asks a question about the current document or general content. Answer in message only. Do not edit or use actions.",
-  "edit: the user asks to rewrite, improve, expand, shorten, make more specific, fix grammar, change tone, or otherwise transform existing text. Return a replacement and set applyReplacement true so the user can review it.",
+  "edit: the user asks to rewrite, improve, expand, shorten, make more specific, fix grammar, change tone, remove words, or otherwise transform EXISTING text in the document. Perform a precise find-and-replace: set find to the exact text to change and replace to the new text.",
   "summarize: the user asks for a summary, outline, key points, or TLDR. Return message only.",
   "reason: the user asks for analysis, critique, gaps, contradictions, next steps, implications, or decisions. Return message only.",
   "tool_action: the user asks you to add new content to the document or change its structure. This includes generating or writing new prose (such as an email, letter, paragraph, section, list, or outline), continuing the document, and creating tables, highlights, headings, or bold/italic formatting. Always return at least one action.",
   "Verbs like generate, write, draft, compose, create, produce, and continue mean the user wants new content placed in their document: classify these as tool_action and return an insert_text action whose text is the full generated content. Do not just put the generated content in message.",
   "For tool_action requests, do not ask clarifying questions. Use reasonable defaults and return at least one action.",
+  "For edit, find MUST be copied verbatim from the current document text (or exactly equal to the selected text when a selection is provided): identical characters, capitalization, and punctuation. Keep find as short as possible while still uniquely locating the text to change, and keep it within a single line or paragraph.",
+  "For edit, change ONLY what the user asked and preserve everything else. Put the updated text in replace. To remove text, set replace to the surrounding text without the removed part, or to an empty string to delete the whole find. NEVER put the entire document in find or replace unless the user explicitly asks to rewrite the whole document.",
   "Use selected editor text as the main target when it is provided.",
-  "When no text is selected, use the current paragraph as the edit/format target for phrases like 'this passage', 'this paragraph', or 'this'.",
-  "Use the full document as broader context, not as the replacement target, unless the user clearly asks to transform the whole document.",
+  "Use the full document as broader context to locate the exact text to change.",
   "Supported editor actions are: insert_table with rows, highlight_target with optional color, highlight_matches with terms and optional color, format_target with bold/italic marks, set_heading with level 1-3, and insert_text with text.",
   "Use insert_table for requests like creating a comparison table, schedule, matrix, rubric, pros/cons table, or turning content into a table.",
   "Use highlight_target for requests like highlight this, mark this, emphasize this passage with color, or call attention to a paragraph.",
@@ -103,10 +106,10 @@ const assistantSystemPrompt = [
   "Use set_heading for requests like make this a heading or title.",
   "Use insert_text to place generated prose or any new text into the document, such as an email, paragraph, continuation, or new section. Set position to 'end' to append or 'cursor' to insert where the user is working.",
   "For summaries and reasoning, stay grounded in the document and separate direct evidence from inference.",
-  "Return JSON only with this shape: {\"requestType\":\"q_and_a|edit|summarize|reason|tool_action\",\"message\":\"short user-facing response\",\"replacement\":\"replacement text or null\",\"applyReplacement\":true|false,\"actions\":[editor actions]}.",
-  "For edit, put only the replacement text in replacement. Do not wrap it in markdown or quotes.",
-  "For q_and_a, summarize, and reason, keep replacement null, applyReplacement false, and actions empty.",
-  "For tool_action, keep replacement null and applyReplacement false unless a separate edit review is truly needed.",
+  "Return JSON only with this shape: {\"requestType\":\"q_and_a|edit|summarize|reason|tool_action\",\"message\":\"short user-facing response\",\"find\":\"exact text to change or null\",\"replace\":\"new text or null\",\"actions\":[editor actions]}.",
+  "For edit, do not wrap find or replace in markdown or quotes.",
+  "For q_and_a, summarize, and reason, keep find and replace null, and actions empty.",
+  "For tool_action, keep find and replace null.",
   "Keep responses concise and practical.",
 ].join(" ");
 
@@ -133,20 +136,14 @@ function parseAssistantResult(text: string): AssistantResult {
     .replace(/\s*```$/i, "");
 
   try {
-    return normalize(parseJson(cleanedText)) ?? {
-      message: text,
-      applyReplacement: false,
-    };
+    return normalize(parseJson(cleanedText)) ?? { message: text };
   } catch {
     const match = cleanedText.match(/\{[\s\S]*\}/);
-    if (!match) return { message: text, applyReplacement: false };
+    if (!match) return { message: text };
     try {
-      return normalize(parseJson(match[0])) ?? {
-        message: text,
-        applyReplacement: false,
-      };
+      return normalize(parseJson(match[0])) ?? { message: text };
     } catch {
-      return { message: text, applyReplacement: false };
+      return { message: text };
     }
   }
 }
@@ -340,16 +337,16 @@ export async function POST(request: Request) {
   }
 
   const result = parseAssistantResult(extractText(payload));
+  const find = typeof result.find === "string" ? result.find : "";
+  const replace = typeof result.replace === "string" ? result.replace : "";
   const requestType: RequestType = isRequestType(result.requestType)
     ? result.requestType
-    : result.applyReplacement
+    : find.trim()
     ? "edit"
     : result.actions?.length
     ? "tool_action"
     : inferRequestType(lastUserMessage.content);
-  const replacement = result.replacement?.trim();
-  const shouldReviewEdit =
-    requestType === "edit" && Boolean(result.applyReplacement && replacement);
+  const shouldReviewEdit = requestType === "edit" && find.trim().length > 0;
   const normalizedActions = normalizeAssistantActions(result.actions);
   const fallbackActions =
     requestType === "tool_action" && !normalizedActions.length
@@ -374,7 +371,7 @@ export async function POST(request: Request) {
   return Response.json({
     requestType,
     message,
-    edit: shouldReviewEdit ? { replacement } : undefined,
+    edit: shouldReviewEdit ? { find, replace } : undefined,
     actions,
   });
 }
