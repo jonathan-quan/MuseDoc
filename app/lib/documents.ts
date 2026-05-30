@@ -13,6 +13,8 @@ export type StoredDocument = {
   /** Plain-text snapshot, used for previews and search. */
   text: string;
   starred: boolean;
+  /** Timestamp the document was moved to Trash, or null if it's active. */
+  trashedAt: number | null;
   createdAt: number;
   updatedAt: number;
 };
@@ -72,6 +74,7 @@ export function createDocument(title = UNTITLED): StoredDocument {
     html: "<p></p>",
     text: "",
     starred: false,
+    trashedAt: null,
     createdAt: now,
     updatedAt: now,
   };
@@ -101,8 +104,50 @@ export function updateDocument(
   return next;
 }
 
+// Patch a single field without touching `updatedAt` (used for Trash/restore so
+// the document keeps its real last-edited time).
+function patch(id: string, changes: Partial<StoredDocument>) {
+  const docs = readAll();
+  const index = docs.findIndex((doc) => doc.id === id);
+  if (index === -1) return;
+  docs[index] = { ...docs[index], ...changes };
+  writeAll(docs);
+}
+
+/** Move a document to Trash. It's kept in storage and can be restored. */
+export function trashDocument(id: string) {
+  patch(id, { trashedAt: Date.now() });
+}
+
+/** Move a document out of Trash, back to the active list. */
+export function restoreDocument(id: string) {
+  patch(id, { trashedAt: null });
+}
+
+/** Permanently remove a single document. */
 export function deleteDocument(id: string) {
   writeAll(readAll().filter((doc) => doc.id !== id));
+}
+
+/** Permanently remove every trashed document. */
+export function emptyTrash() {
+  writeAll(readAll().filter((doc) => !doc.trashedAt));
+}
+
+/** Approximate bytes used by the stored documents (for the Storage meter). */
+export function storageUsageBytes(): number {
+  if (!isBrowser()) return 0;
+  try {
+    return new Blob([window.localStorage.getItem(STORAGE_KEY) ?? ""]).size;
+  } catch {
+    return 0;
+  }
+}
+
+export function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 /** Human-friendly "opened" label like Drive ("May 25", "2:14 PM", "Yesterday"). */

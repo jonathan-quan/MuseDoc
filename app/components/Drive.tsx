@@ -12,25 +12,44 @@ import {
   MoreVertical,
   Pencil,
   Plus,
+  RotateCcw,
   Search,
   Star,
   Sun,
   Trash2,
 } from "lucide-react";
 import {
+  formatBytes,
   formatTimestamp,
   type StoredDocument,
 } from "../lib/documents";
 
 type View = "home" | "recent" | "starred" | "trash";
 
+// Rough localStorage budget used to render the Storage meter. Browsers
+// typically allow ~5 MB per origin.
+const STORAGE_BUDGET_BYTES = 5 * 1024 * 1024;
+
+type DocActions = {
+  onOpen: () => void;
+  onRename: () => void;
+  onToggleStar: () => void;
+  onTrash: () => void;
+  onRestore: () => void;
+  onDeleteForever: () => void;
+};
+
 type DriveProps = {
   documents: StoredDocument[];
+  storageBytes: number;
   onOpen: (id: string) => void;
   onCreate: () => void;
   onRename: (id: string, title: string) => void;
-  onDelete: (id: string) => void;
   onToggleStar: (id: string) => void;
+  onTrash: (id: string) => void;
+  onRestore: (id: string) => void;
+  onDeleteForever: (id: string) => void;
+  onEmptyTrash: () => void;
   theme: "light" | "dark";
   onToggleTheme: () => void;
 };
@@ -55,20 +74,49 @@ function DocPreview({ html }: { html: string }) {
   );
 }
 
+type MenuItem = {
+  label: string;
+  icon: typeof FileText;
+  fn: () => void;
+  danger?: boolean;
+};
+
 function CardMenu({
   doc,
-  onOpen,
-  onRename,
-  onDelete,
-  onToggleStar,
+  inTrash,
+  actions,
 }: {
   doc: StoredDocument;
-  onOpen: () => void;
-  onRename: () => void;
-  onDelete: () => void;
-  onToggleStar: () => void;
+  inTrash: boolean;
+  actions: DocActions;
 }) {
   const [open, setOpen] = useState(false);
+
+  const items: MenuItem[] = inTrash
+    ? [
+        { label: "Restore", icon: RotateCcw, fn: actions.onRestore },
+        {
+          label: "Delete forever",
+          icon: Trash2,
+          fn: actions.onDeleteForever,
+          danger: true,
+        },
+      ]
+    : [
+        { label: "Open", icon: FileText, fn: actions.onOpen },
+        { label: "Rename", icon: Pencil, fn: actions.onRename },
+        {
+          label: doc.starred ? "Remove from starred" : "Add to starred",
+          icon: Star,
+          fn: actions.onToggleStar,
+        },
+        {
+          label: "Move to trash",
+          icon: Trash2,
+          fn: actions.onTrash,
+          danger: true,
+        },
+      ];
 
   return (
     <div className="relative" onClick={(e) => e.stopPropagation()}>
@@ -84,16 +132,7 @@ function CardMenu({
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
           <div className="absolute right-0 z-50 mt-1 w-44 overflow-hidden rounded-lg border border-gray-200 bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-800">
-            {[
-              { label: "Open", icon: FileText, fn: onOpen },
-              { label: "Rename", icon: Pencil, fn: onRename },
-              {
-                label: doc.starred ? "Remove from starred" : "Add to starred",
-                icon: Star,
-                fn: onToggleStar,
-              },
-              { label: "Delete", icon: Trash2, fn: onDelete, danger: true },
-            ].map(({ label, icon: Icon, fn, danger }) => (
+            {items.map(({ label, icon: Icon, fn, danger }) => (
               <button
                 key={label}
                 type="button"
@@ -120,97 +159,106 @@ function CardMenu({
 
 function DocCard({
   doc,
-  onOpen,
-  onRename,
-  onDelete,
-  onToggleStar,
+  inTrash,
+  actions,
 }: {
   doc: StoredDocument;
-  onOpen: () => void;
-  onRename: () => void;
-  onDelete: () => void;
-  onToggleStar: () => void;
+  inTrash: boolean;
+  actions: DocActions;
 }) {
+  // In Trash, clicking the card does nothing — actions come from the menu.
   return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className="group flex flex-col overflow-hidden rounded-xl border border-gray-200 bg-white text-left transition-shadow hover:shadow-md dark:border-gray-700 dark:bg-gray-800"
+    <div
+      role={inTrash ? undefined : "button"}
+      tabIndex={inTrash ? undefined : 0}
+      onClick={inTrash ? undefined : actions.onOpen}
+      onKeyDown={
+        inTrash
+          ? undefined
+          : (e) => {
+              if (e.key === "Enter" || e.key === " ") actions.onOpen();
+            }
+      }
+      className={`group flex flex-col overflow-hidden rounded-xl border border-gray-200 bg-white text-left transition-shadow dark:border-gray-700 dark:bg-gray-800 ${
+        inTrash ? "" : "cursor-pointer hover:shadow-md"
+      }`}
     >
       <div className="flex items-center gap-2 px-4 py-3">
         <FileText size={18} className="shrink-0 text-blue-600" />
         <span className="flex-1 truncate text-sm font-medium text-gray-800 dark:text-gray-100">
           {doc.title || "Untitled document"}
         </span>
-        {doc.starred && (
+        {doc.starred && !inTrash && (
           <Star size={14} className="shrink-0 fill-amber-400 text-amber-400" />
         )}
-        <CardMenu
-          doc={doc}
-          onOpen={onOpen}
-          onRename={onRename}
-          onDelete={onDelete}
-          onToggleStar={onToggleStar}
-        />
+        <CardMenu doc={doc} inTrash={inTrash} actions={actions} />
       </div>
       <div className="h-44 border-t border-gray-100 dark:border-gray-700">
         <DocPreview html={doc.html} />
       </div>
       <div className="flex items-center gap-2 px-4 py-2.5 text-xs text-gray-500 dark:text-gray-400">
         <Clock size={13} />
-        Opened {formatTimestamp(doc.updatedAt)}
+        {inTrash && doc.trashedAt
+          ? `Trashed ${formatTimestamp(doc.trashedAt)}`
+          : `Opened ${formatTimestamp(doc.updatedAt)}`}
       </div>
-    </button>
+    </div>
   );
 }
 
 function DocRow({
   doc,
-  onOpen,
-  onRename,
-  onDelete,
-  onToggleStar,
+  inTrash,
+  actions,
 }: {
   doc: StoredDocument;
-  onOpen: () => void;
-  onRename: () => void;
-  onDelete: () => void;
-  onToggleStar: () => void;
+  inTrash: boolean;
+  actions: DocActions;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className="group flex w-full items-center gap-3 rounded-lg px-4 py-2.5 text-left hover:bg-gray-100 dark:hover:bg-gray-800"
+    <div
+      role={inTrash ? undefined : "button"}
+      tabIndex={inTrash ? undefined : 0}
+      onClick={inTrash ? undefined : actions.onOpen}
+      onKeyDown={
+        inTrash
+          ? undefined
+          : (e) => {
+              if (e.key === "Enter" || e.key === " ") actions.onOpen();
+            }
+      }
+      className={`group flex w-full items-center gap-3 rounded-lg px-4 py-2.5 text-left ${
+        inTrash ? "" : "cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800"
+      }`}
     >
       <FileText size={18} className="shrink-0 text-blue-600" />
       <span className="flex-1 truncate text-sm font-medium text-gray-800 dark:text-gray-100">
         {doc.title || "Untitled document"}
       </span>
-      {doc.starred && (
+      {doc.starred && !inTrash && (
         <Star size={14} className="shrink-0 fill-amber-400 text-amber-400" />
       )}
       <span className="hidden w-32 shrink-0 text-xs text-gray-500 sm:block dark:text-gray-400">
-        {formatTimestamp(doc.updatedAt)}
+        {inTrash && doc.trashedAt
+          ? formatTimestamp(doc.trashedAt)
+          : formatTimestamp(doc.updatedAt)}
       </span>
-      <CardMenu
-        doc={doc}
-        onOpen={onOpen}
-        onRename={onRename}
-        onDelete={onDelete}
-        onToggleStar={onToggleStar}
-      />
-    </button>
+      <CardMenu doc={doc} inTrash={inTrash} actions={actions} />
+    </div>
   );
 }
 
 export default function Drive({
   documents,
+  storageBytes,
   onOpen,
   onCreate,
   onRename,
-  onDelete,
   onToggleStar,
+  onTrash,
+  onRestore,
+  onDeleteForever,
+  onEmptyTrash,
   theme,
   onToggleTheme,
 }: DriveProps) {
@@ -224,8 +272,12 @@ export default function Drive({
     if (renaming) renameInputRef.current?.select();
   }, [renaming]);
 
+  const inTrash = view === "trash";
   const q = query.trim().toLowerCase();
   const visible = documents
+    // Trash shows only trashed documents; every other view shows only active
+    // ones. (Starred additionally requires the star.)
+    .filter((doc) => (inTrash ? doc.trashedAt : !doc.trashedAt))
     .filter((doc) => (view === "starred" ? doc.starred : true))
     .filter(
       (doc) =>
@@ -233,6 +285,12 @@ export default function Drive({
         doc.title.toLowerCase().includes(q) ||
         doc.text.toLowerCase().includes(q)
     );
+
+  const activeCount = documents.filter((doc) => !doc.trashedAt).length;
+  const storagePercent = Math.min(
+    100,
+    Math.round((storageBytes / STORAGE_BUDGET_BYTES) * 100)
+  );
 
   const heading =
     view === "starred"
@@ -246,6 +304,17 @@ export default function Drive({
   function commitRename(title: string) {
     if (renaming) onRename(renaming.id, title.trim() || "Untitled document");
     setRenaming(null);
+  }
+
+  function actionsFor(doc: StoredDocument): DocActions {
+    return {
+      onOpen: () => onOpen(doc.id),
+      onRename: () => setRenaming(doc),
+      onToggleStar: () => onToggleStar(doc.id),
+      onTrash: () => onTrash(doc.id),
+      onRestore: () => onRestore(doc.id),
+      onDeleteForever: () => onDeleteForever(doc.id),
+    };
   }
 
   return (
@@ -320,19 +389,38 @@ export default function Drive({
             <HardDrive size={18} />
             Storage
           </div>
-          <div className="px-4 text-xs text-gray-500 dark:text-gray-400">
-            {documents.length} document{documents.length === 1 ? "" : "s"} stored
-            locally
+          <div className="px-4">
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-gray-800">
+              <div
+                className="h-full rounded-full bg-blue-500"
+                style={{ width: `${Math.max(2, storagePercent)}%` }}
+              />
+            </div>
+            <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+              {formatBytes(storageBytes)} used · {activeCount} document
+              {activeCount === 1 ? "" : "s"}
+            </p>
           </div>
         </aside>
 
         {/* Content */}
         <main className="min-h-0 flex-1 overflow-auto rounded-tl-2xl bg-white px-8 py-6 dark:bg-gray-900">
-          <div className="mb-6 flex items-center justify-between">
+          <div className="mb-6 flex items-center justify-between gap-3">
             <h1 className="text-2xl font-normal text-gray-700 dark:text-gray-200">
               {heading}
             </h1>
-            <div className="flex items-center rounded-full border border-gray-200 dark:border-gray-700">
+            <div className="flex items-center gap-3">
+              {inTrash && visible.length > 0 && (
+                <button
+                  type="button"
+                  onClick={onEmptyTrash}
+                  className="flex items-center gap-1.5 rounded-full border border-gray-200 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50 dark:border-gray-700 dark:text-red-400 dark:hover:bg-red-950"
+                >
+                  <Trash2 size={15} />
+                  Empty trash
+                </button>
+              )}
+              <div className="flex items-center rounded-full border border-gray-200 dark:border-gray-700">
               <button
                 type="button"
                 aria-label="List view"
@@ -357,20 +445,27 @@ export default function Drive({
               >
                 <Grid2x2 size={16} />
               </button>
+              </div>
             </div>
           </div>
 
           {visible.length === 0 ? (
             <div className="flex flex-col items-center justify-center gap-3 py-24 text-center">
-              <FileText size={48} className="text-gray-300 dark:text-gray-600" />
+              {inTrash ? (
+                <Trash2 size={48} className="text-gray-300 dark:text-gray-600" />
+              ) : (
+                <FileText size={48} className="text-gray-300 dark:text-gray-600" />
+              )}
               <p className="text-sm text-gray-500 dark:text-gray-400">
                 {q
                   ? "No documents match your search."
                   : view === "starred"
                   ? "No starred documents yet."
+                  : inTrash
+                  ? "Trash is empty."
                   : "No documents yet."}
               </p>
-              {!q && view !== "starred" && (
+              {!q && view !== "starred" && !inTrash && (
                 <button
                   type="button"
                   onClick={onCreate}
@@ -387,10 +482,8 @@ export default function Drive({
                 <DocCard
                   key={doc.id}
                   doc={doc}
-                  onOpen={() => onOpen(doc.id)}
-                  onRename={() => setRenaming(doc)}
-                  onDelete={() => onDelete(doc.id)}
-                  onToggleStar={() => onToggleStar(doc.id)}
+                  inTrash={inTrash}
+                  actions={actionsFor(doc)}
                 />
               ))}
             </div>
@@ -400,10 +493,8 @@ export default function Drive({
                 <DocRow
                   key={doc.id}
                   doc={doc}
-                  onOpen={() => onOpen(doc.id)}
-                  onRename={() => setRenaming(doc)}
-                  onDelete={() => onDelete(doc.id)}
-                  onToggleStar={() => onToggleStar(doc.id)}
+                  inTrash={inTrash}
+                  actions={actionsFor(doc)}
                 />
               ))}
             </div>
