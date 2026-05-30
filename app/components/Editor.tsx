@@ -646,8 +646,9 @@ function TableGridPicker({
 }
 
 export type EditorHandle = {
-  replaceSelectionOrCurrentBlock: (text: string) => void;
-  replaceRange: (range: { from: number; to: number }, text: string) => void;
+  /** Locate `find` verbatim in the document and replace it in place with
+   *  `replace` (empty `replace` deletes it), preserving everything else. */
+  replaceText: (find: string, replace: string) => boolean;
   applyAssistantActions: (actions: AssistantEditorAction[]) => void;
 };
 
@@ -660,6 +661,9 @@ export type AssistantEditorAction =
   | { type: "insert_text"; text: string; position?: "cursor" | "end" };
 
 type EditorProps = {
+  /** HTML to load when the editor mounts. Remount (via `key`) to load a
+   *  different document. */
+  initialContent?: string;
   onDocumentChange?: (document: {
     text: string;
     html: string;
@@ -886,6 +890,7 @@ function tableContent(rows: string[][]) {
 }
 
 const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
+  initialContent,
   onDocumentChange,
 }, ref) {
   const [showOutline, setShowOutline] = useState(true);
@@ -967,7 +972,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
       SearchReplace,
       Placeholder.configure({ placeholder: "Start writing…" }),
     ],
-    content: "",
+    content: initialContent || "",
     editorProps: {
       attributes: {
         class:
@@ -999,16 +1004,52 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
   useImperativeHandle(
     ref,
     () => ({
-      replaceRange(range: { from: number; to: number }, text: string) {
-        if (!editor) return;
-        const replacement = text.trim();
-        if (!replacement) return;
+      replaceText(find: string, replace: string) {
+        if (!editor) return false;
+        const query = find.trim();
+        if (!query) return false;
 
+        // Match the text verbatim within a single block, tolerating only
+        // differences in whitespace runs (so the model's copy need not match
+        // the document's exact spacing/line wrapping).
+        const pattern = query
+          .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+          .replace(/\s+/g, "\\s+");
+        const re = new RegExp(pattern);
+
+        let foundFrom = -1;
+        let foundTo = -1;
+        editor.state.doc.descendants((node, pos) => {
+          if (foundFrom !== -1) return false;
+          if (node.isTextblock && node.textContent) {
+            const match = re.exec(node.textContent);
+            if (match) {
+              foundFrom = pos + 1 + match.index;
+              foundTo = foundFrom + match[0].length;
+            }
+          }
+          return foundFrom === -1;
+        });
+
+        if (foundFrom === -1) return false;
+        const range = { from: foundFrom, to: foundTo };
+
+        if (!replace.trim()) {
+          editor.chain().focus().deleteRange(range).run();
+          return true;
+        }
+
+        // Keep the marks (bold/italic/…) of the text being replaced.
+        const marks = editor.state.doc
+          .resolve(range.from)
+          .marks()
+          .map((mark) => ({ type: mark.type.name, attrs: mark.attrs }));
         editor
           .chain()
           .focus()
-          .insertContentAt(range, textToEditorContent(replacement))
+          .insertContentAt(range, [{ type: "text", text: replace, marks }])
           .run();
+        return true;
       },
       applyAssistantActions(actions: AssistantEditorAction[]) {
         if (!editor) return;
@@ -1117,26 +1158,6 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
               .run();
           }
         }
-      },
-      replaceSelectionOrCurrentBlock(text: string) {
-        if (!editor) return;
-        const replacement = text.trim();
-        if (!replacement) return;
-
-        const { selection } = editor.state;
-        let from = selection.from;
-        let to = selection.to;
-
-        if (selection.empty && selection.$from.depth > 0) {
-          from = selection.$from.before(selection.$from.depth);
-          to = selection.$from.after(selection.$from.depth);
-        }
-
-        editor
-          .chain()
-          .focus()
-          .insertContentAt({ from, to }, textToEditorContent(replacement))
-          .run();
       },
     }),
     [editor]
