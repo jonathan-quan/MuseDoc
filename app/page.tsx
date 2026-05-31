@@ -15,6 +15,7 @@ import {
   updateDocument,
   type StoredDocument,
 } from "./lib/documents";
+import { getTemplate } from "./lib/templates";
 import { useTheme } from "./lib/useTheme";
 
 export default function Home() {
@@ -36,8 +37,11 @@ export default function Home() {
     refresh();
   }, []);
 
-  function handleCreate() {
-    const doc = createDocument();
+  function handleCreate(templateId?: string) {
+    const template = templateId ? getTemplate(templateId) : undefined;
+    const doc = template
+      ? createDocument(template.title, template.html)
+      : createDocument();
     router.push(`/doc/${doc.id}`);
   }
 

@@ -27,6 +27,8 @@ import Editor, {
 } from "./Editor";
 import {
   getDocument,
+  loadChat,
+  saveChat,
   updateDocument,
   UNTITLED,
   type StoredDocument,
@@ -314,10 +316,20 @@ export default function DocumentWorkspace({ docId }: { docId: string }) {
       router.replace("/");
       return;
     }
+    const savedChat = loadChat(docId);
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setDoc(found);
     setTitle(found.title);
+    if (savedChat && savedChat.length) setMessages(savedChat as ChatMessage[]);
   }, [docId, router]);
+
+  // Persist the conversation for this document so it survives leaving and
+  // returning. Gated on `doc` so we never overwrite a saved chat with the
+  // initial greeting before it has loaded.
+  useEffect(() => {
+    if (!doc) return;
+    saveChat(docId, messages);
+  }, [doc, docId, messages]);
 
   // Autosave. Debounced so we don't write to localStorage on every keystroke.
   // Persists the editor's HTML (reloaded on reopen), a plain-text snapshot

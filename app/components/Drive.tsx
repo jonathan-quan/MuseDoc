@@ -23,12 +23,16 @@ import {
   formatTimestamp,
   type StoredDocument,
 } from "../lib/documents";
+import { templates } from "../lib/templates";
 
 type View = "home" | "recent" | "starred" | "trash";
 
 // Rough localStorage budget used to render the Storage meter. Browsers
 // typically allow ~5 MB per origin.
 const STORAGE_BUDGET_BYTES = 5 * 1024 * 1024;
+
+// "Recent" shows documents touched within this window.
+const RECENT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 type DocActions = {
   onOpen: () => void;
@@ -43,7 +47,7 @@ type DriveProps = {
   documents: StoredDocument[];
   storageBytes: number;
   onOpen: (id: string) => void;
-  onCreate: () => void;
+  onCreate: (templateId?: string) => void;
   onRename: (id: string, title: string) => void;
   onToggleStar: (id: string) => void;
   onTrash: (id: string) => void;
@@ -60,6 +64,52 @@ const navItems: { id: View; label: string; icon: typeof Home }[] = [
   { id: "starred", label: "Starred", icon: Star },
   { id: "trash", label: "Trash", icon: Trash2 },
 ];
+
+/** The Drive "New" button: a blank document, or one from a template. */
+function NewMenu({ onCreate }: { onCreate: (templateId?: string) => void }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="relative mb-4">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-fit items-center gap-3 rounded-2xl border border-gray-200 bg-white py-3.5 pl-4 pr-6 text-sm font-medium text-gray-700 shadow-sm transition-shadow hover:shadow-md dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
+      >
+        <Plus size={20} />
+        New
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute left-0 top-full z-50 mt-1 w-60 overflow-hidden rounded-lg border border-gray-200 bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-800">
+            {templates.map((template) => (
+              <button
+                key={template.id}
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  onCreate(template.id === "blank" ? undefined : template.id);
+                }}
+                className="flex w-full items-start gap-3 px-3 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700"
+              >
+                <FileText size={16} className="mt-0.5 shrink-0 text-blue-600" />
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium text-gray-800 dark:text-gray-100">
+                    {template.label}
+                  </span>
+                  <span className="block truncate text-xs text-gray-500 dark:text-gray-400">
+                    {template.description}
+                  </span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
 /** A scaled-down render of the document's HTML, used as a card thumbnail. */
 function DocPreview({ html }: { html: string }) {
@@ -272,13 +322,17 @@ export default function Drive({
     if (renaming) renameInputRef.current?.select();
   }, [renaming]);
 
+  // Captured once at mount; a 7-day window doesn't need to track the live clock.
+  const [recentCutoff] = useState(() => Date.now() - RECENT_WINDOW_MS);
+
   const inTrash = view === "trash";
   const q = query.trim().toLowerCase();
   const visible = documents
     // Trash shows only trashed documents; every other view shows only active
-    // ones. (Starred additionally requires the star.)
+    // ones. (Starred needs the star; Recent needs recent activity.)
     .filter((doc) => (inTrash ? doc.trashedAt : !doc.trashedAt))
     .filter((doc) => (view === "starred" ? doc.starred : true))
+    .filter((doc) => (view === "recent" ? doc.updatedAt >= recentCutoff : true))
     .filter(
       (doc) =>
         !q ||
@@ -362,14 +416,7 @@ export default function Drive({
       <div className="flex min-h-0 flex-1">
         {/* Sidebar */}
         <aside className="flex w-56 shrink-0 flex-col gap-1 px-3 py-2">
-          <button
-            type="button"
-            onClick={onCreate}
-            className="mb-4 flex w-fit items-center gap-3 rounded-2xl border border-gray-200 bg-white py-3.5 pl-4 pr-6 text-sm font-medium text-gray-700 shadow-sm transition-shadow hover:shadow-md dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
-          >
-            <Plus size={20} />
-            New
-          </button>
+          <NewMenu onCreate={onCreate} />
           {navItems.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
@@ -461,6 +508,8 @@ export default function Drive({
                   ? "No documents match your search."
                   : view === "starred"
                   ? "No starred documents yet."
+                  : view === "recent"
+                  ? "Nothing opened in the last 7 days."
                   : inTrash
                   ? "Trash is empty."
                   : "No documents yet."}
@@ -468,7 +517,7 @@ export default function Drive({
               {!q && view !== "starred" && !inTrash && (
                 <button
                   type="button"
-                  onClick={onCreate}
+                  onClick={() => onCreate()}
                   className="mt-1 flex items-center gap-2 rounded-full bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
                 >
                   <Plus size={16} />
