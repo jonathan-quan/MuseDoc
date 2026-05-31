@@ -66,12 +66,12 @@ export function getDocument(id: string): StoredDocument | null {
   return readAll().find((doc) => doc.id === id) ?? null;
 }
 
-export function createDocument(title = UNTITLED): StoredDocument {
+export function createDocument(title = UNTITLED, html = "<p></p>"): StoredDocument {
   const now = Date.now();
   const doc: StoredDocument = {
     id: createId(),
     title,
-    html: "<p></p>",
+    html,
     text: "",
     starred: false,
     trashedAt: null,
@@ -124,14 +124,17 @@ export function restoreDocument(id: string) {
   patch(id, { trashedAt: null });
 }
 
-/** Permanently remove a single document. */
+/** Permanently remove a single document (and its saved chat). */
 export function deleteDocument(id: string) {
   writeAll(readAll().filter((doc) => doc.id !== id));
+  deleteChat(id);
 }
 
-/** Permanently remove every trashed document. */
+/** Permanently remove every trashed document (and their chats). */
 export function emptyTrash() {
-  writeAll(readAll().filter((doc) => !doc.trashedAt));
+  const all = readAll();
+  all.filter((doc) => doc.trashedAt).forEach((doc) => deleteChat(doc.id));
+  writeAll(all.filter((doc) => !doc.trashedAt));
 }
 
 /** Approximate bytes used by the stored documents (for the Storage meter). */
@@ -148,6 +151,59 @@ export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+// ── Per-document chat history ──────────────────────────────────────────────
+// Stored separately from the documents themselves (keyed by document id) so a
+// conversation survives navigating away and back, without bloating each
+// document record or its autosave path.
+
+export type StoredChatMessage = {
+  role: "user" | "assistant";
+  content: string;
+  requestType?: string;
+};
+
+const CHAT_KEY = "musedoc-chats";
+
+function readChats(): Record<string, StoredChatMessage[]> {
+  if (!isBrowser()) return {};
+  try {
+    const raw = window.localStorage.getItem(CHAT_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeChats(chats: Record<string, StoredChatMessage[]>) {
+  if (!isBrowser()) return;
+  try {
+    window.localStorage.setItem(CHAT_KEY, JSON.stringify(chats));
+  } catch {
+    // Storage full/unavailable — chat history is best-effort.
+  }
+}
+
+/** The saved conversation for a document, or null if none has been saved. */
+export function loadChat(id: string): StoredChatMessage[] | null {
+  const chats = readChats();
+  return Array.isArray(chats[id]) ? chats[id] : null;
+}
+
+export function saveChat(id: string, messages: StoredChatMessage[]) {
+  const chats = readChats();
+  chats[id] = messages;
+  writeChats(chats);
+}
+
+export function deleteChat(id: string) {
+  const chats = readChats();
+  if (id in chats) {
+    delete chats[id];
+    writeChats(chats);
+  }
 }
 
 /** Human-friendly "opened" label like Drive ("May 25", "2:14 PM", "Yesterday"). */
