@@ -1,0 +1,69 @@
+// Auth proxy (formerly "middleware" — renamed to `proxy` in Next 16; see
+// node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/proxy.md).
+//
+// Runs before every matched route to (1) refresh the Supabase auth session so
+// its cookies stay fresh, and (2) bounce signed-out visitors to /login. Proxy
+// defaults to the Node.js runtime in this version, which Supabase needs.
+import { createServerClient } from "@supabase/ssr";
+import { NextResponse, type NextRequest } from "next/server";
+
+export async function proxy(request: NextRequest) {
+  let response = NextResponse.next({ request });
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll();
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value }) =>
+            request.cookies.set(name, value)
+          );
+          response = NextResponse.next({ request });
+          cookiesToSet.forEach(({ name, value, options }) =>
+            response.cookies.set(name, value, options)
+          );
+        },
+      },
+    }
+  );
+
+  // IMPORTANT: getUser() revalidates the token with Supabase; do not trust
+  // getSession() here. Keep this call directly after creating the client.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const { pathname } = request.nextUrl;
+  // Public paths that an unauthenticated visitor is allowed to reach.
+  const isPublic =
+    pathname.startsWith("/login") ||
+    pathname.startsWith("/auth") ||
+    pathname.startsWith("/api");
+
+  if (!user && !isPublic) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+    return NextResponse.redirect(url);
+  }
+
+  // Already signed in? Skip the login page.
+  if (user && pathname.startsWith("/login")) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/";
+    return NextResponse.redirect(url);
+  }
+
+  return response;
+}
+
+export const config = {
+  matcher: [
+    // Run on everything except Next internals and static asset files, so the
+    // session is refreshed on real navigations but not on image/worker fetches.
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|mjs|js|css|woff2?)$).*)",
+  ],
+};

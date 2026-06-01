@@ -8,6 +8,7 @@ import {
   Home,
   HardDrive,
   List as ListIcon,
+  LogOut,
   Moon,
   MoreVertical,
   Pencil,
@@ -448,6 +449,17 @@ export default function Drive({
               {activeCount === 1 ? "" : "s"}
             </p>
           </div>
+          {/* Native form POST hits the sign-out route handler, which clears the
+              Supabase session cookies and redirects to /login. */}
+          <form action="/auth/signout" method="post" className="mt-auto">
+            <button
+              type="submit"
+              className="flex w-full items-center gap-4 rounded-full px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
+            >
+              <LogOut size={18} />
+              Sign out
+            </button>
+          </form>
         </aside>
 
         {/* Content */}
