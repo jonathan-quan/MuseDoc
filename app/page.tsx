@@ -24,57 +24,63 @@ export default function Home() {
   const [documents, setDocuments] = useState<StoredDocument[]>([]);
   const [storageBytes, setStorageBytes] = useState(0);
 
-  // Pull the latest list + storage usage from localStorage into state. Kept in
+  // Pull the latest list + storage usage from Supabase into state. Kept in
   // state (rather than read during render) so the server and first client
-  // render agree — both start empty, then this fills in after mount.
-  function refresh() {
-    setDocuments(listDocuments());
-    setStorageBytes(storageUsageBytes());
+  // render agree — both start empty, then this fills in after the queries
+  // resolve.
+  async function refresh() {
+    const [docs, bytes] = await Promise.all([
+      listDocuments(),
+      storageUsageBytes(),
+    ]);
+    setDocuments(docs);
+    setStorageBytes(bytes);
   }
 
   useEffect(() => {
+    // refresh() only setState after awaiting the queries, not synchronously.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    refresh();
+    void refresh();
   }, []);
 
-  function handleCreate(templateId?: string) {
+  async function handleCreate(templateId?: string) {
     const template = templateId ? getTemplate(templateId) : undefined;
     const doc = template
-      ? createDocument(template.title, template.html)
-      : createDocument();
-    router.push(`/doc/${doc.id}`);
+      ? await createDocument(template.title, template.html)
+      : await createDocument();
+    if (doc) router.push(`/doc/${doc.id}`);
   }
 
-  function handleRename(id: string, title: string) {
-    updateDocument(id, { title });
-    refresh();
+  async function handleRename(id: string, title: string) {
+    await updateDocument(id, { title });
+    await refresh();
   }
 
-  function handleToggleStar(id: string) {
-    const doc = getDocument(id);
+  async function handleToggleStar(id: string) {
+    const doc = await getDocument(id);
     if (!doc) return;
-    updateDocument(id, { starred: !doc.starred });
-    refresh();
+    await updateDocument(id, { starred: !doc.starred });
+    await refresh();
   }
 
-  function handleTrash(id: string) {
-    trashDocument(id);
-    refresh();
+  async function handleTrash(id: string) {
+    await trashDocument(id);
+    await refresh();
   }
 
-  function handleRestore(id: string) {
-    restoreDocument(id);
-    refresh();
+  async function handleRestore(id: string) {
+    await restoreDocument(id);
+    await refresh();
   }
 
-  function handleDeleteForever(id: string) {
-    deleteDocument(id);
-    refresh();
+  async function handleDeleteForever(id: string) {
+    await deleteDocument(id);
+    await refresh();
   }
 
-  function handleEmptyTrash() {
-    emptyTrash();
-    refresh();
+  async function handleEmptyTrash() {
+    await emptyTrash();
+    await refresh();
   }
 
   return (

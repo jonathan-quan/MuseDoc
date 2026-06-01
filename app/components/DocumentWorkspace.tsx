@@ -308,19 +308,26 @@ export default function DocumentWorkspace({ docId }: { docId: string }) {
   const audioChunksRef = useRef<Blob[]>([]);
   const [chatWidth, setChatWidth] = useState(384);
 
-  // Load the document for this route from localStorage. If it doesn't exist
-  // (bad or stale URL), send the user back to the Drive home.
+  // Load the document for this route from Supabase. If it doesn't exist (bad or
+  // stale URL, or not the signed-in user's), send the user back to Drive home.
   useEffect(() => {
-    const found = getDocument(docId);
-    if (!found) {
-      router.replace("/");
-      return;
-    }
-    const savedChat = loadChat(docId);
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setDoc(found);
-    setTitle(found.title);
-    if (savedChat && savedChat.length) setMessages(savedChat as ChatMessage[]);
+    let cancelled = false;
+    (async () => {
+      const found = await getDocument(docId);
+      if (cancelled) return;
+      if (!found) {
+        router.replace("/");
+        return;
+      }
+      const savedChat = await loadChat(docId);
+      if (cancelled) return;
+      setDoc(found);
+      setTitle(found.title);
+      if (savedChat && savedChat.length) setMessages(savedChat as ChatMessage[]);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [docId, router]);
 
   // Persist the conversation for this document so it survives leaving and
@@ -328,16 +335,16 @@ export default function DocumentWorkspace({ docId }: { docId: string }) {
   // initial greeting before it has loaded.
   useEffect(() => {
     if (!doc) return;
-    saveChat(docId, messages);
+    void saveChat(docId, messages);
   }, [doc, docId, messages]);
 
-  // Autosave. Debounced so we don't write to localStorage on every keystroke.
+  // Autosave. Debounced so we don't write to the database on every keystroke.
   // Persists the editor's HTML (reloaded on reopen), a plain-text snapshot
   // (used for Drive previews and search), and the current title.
   useEffect(() => {
     if (!doc) return;
     const timer = window.setTimeout(() => {
-      updateDocument(docId, {
+      void updateDocument(docId, {
         title: title.trim() || UNTITLED,
         html: documentContext.html,
         text: documentContext.text,
@@ -346,10 +353,10 @@ export default function DocumentWorkspace({ docId }: { docId: string }) {
     return () => window.clearTimeout(timer);
   }, [doc, docId, title, documentContext.html, documentContext.text]);
 
-  function backToDrive() {
+  async function backToDrive() {
     // Flush any pending edits immediately so the Drive preview is current.
     if (doc) {
-      updateDocument(docId, {
+      await updateDocument(docId, {
         title: title.trim() || UNTITLED,
         html: documentContext.html,
         text: documentContext.text,
