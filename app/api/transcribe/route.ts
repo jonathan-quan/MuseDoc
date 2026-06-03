@@ -24,6 +24,7 @@ export async function POST(request: Request) {
 
   const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
     method: "POST",
+    cache: "no-store",
     headers: { Authorization: `Bearer ${apiKey}` },
     body: openAIForm,
   });

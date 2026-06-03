@@ -175,7 +175,7 @@ function CardMenu({
         type="button"
         aria-label="Document options"
         onClick={() => setOpen((v) => !v)}
-        className="flex h-8 w-8 items-center justify-center rounded-full text-gray-500 hover:bg-gray-200/70 dark:text-gray-400 dark:hover:bg-gray-700"
+        className="flex size-8 items-center justify-center rounded-full text-gray-500 hover:bg-gray-200/70 dark:text-gray-400 dark:hover:bg-gray-700"
       >
         <MoreVertical size={16} />
       </button>
@@ -377,7 +377,7 @@ export default function Drive({
       {/* Top bar */}
       <header className="flex shrink-0 items-center gap-4 px-4 py-3">
         <div className="flex w-56 items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-600 text-white">
+          <div className="flex size-9 items-center justify-center rounded-lg bg-blue-600 text-white">
             <FileText size={18} />
           </div>
           <span className="text-xl font-medium text-gray-700 dark:text-gray-200">
@@ -391,6 +391,7 @@ export default function Drive({
           />
           <input
             value={query}
+            aria-label="Search in MuseDoc"
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search in MuseDoc"
             className="h-12 w-full rounded-full bg-gray-100 pl-12 pr-4 text-sm text-gray-800 outline-none focus:bg-white focus:shadow-md dark:bg-gray-800 dark:text-gray-100 dark:focus:bg-gray-800"
@@ -578,6 +579,7 @@ export default function Drive({
             </h2>
             <input
               ref={renameInputRef}
+              aria-label="Document name"
               defaultValue={renaming.title}
               onKeyDown={(e) => {
                 if (e.key === "Enter") commitRename(e.currentTarget.value);

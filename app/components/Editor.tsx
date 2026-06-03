@@ -624,6 +624,7 @@ function TableGridPicker({
             <button
               key={idx}
               type="button"
+              aria-label={`Insert ${r} by ${c} table`}
               onMouseEnter={() => setHover({ rows: r, cols: c })}
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => onPick(r, c)}
@@ -2065,6 +2066,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
               ref={imageInputRef}
               type="file"
               accept="image/*"
+              aria-label="Upload image"
               onChange={addImageFromFile}
               className="hidden"
             />
@@ -2089,6 +2091,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
             >
               <div className="w-44 rounded-md border border-gray-200 bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-800">
                 <button
+                  type="button"
                   className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
                   onClick={() => {
                     editor?.chain().focus().toggleBlockquote().run();
@@ -2098,6 +2101,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
                   <Quote size={15} /> Quote
                 </button>
                 <button
+                  type="button"
                   className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
                   onClick={() => {
                     editor?.chain().focus().toggleFrame().run();
@@ -2107,6 +2111,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
                   <FrameIcon size={15} /> Frame
                 </button>
                 <button
+                  type="button"
                   className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
                   onClick={() => {
                     editor?.chain().focus().setHorizontalRule().run();
@@ -2157,6 +2162,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
             ref={importInputRef}
             type="file"
             accept=".pdf,.docx,.txt,.md,.markdown,.html,.htm,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,text/html"
+            aria-label="Import document"
             onChange={importDocument}
             className="hidden"
           />
@@ -2188,6 +2194,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
             >
               <div className="w-52 rounded-md border border-gray-200 bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-800">
                 <button
+                  type="button"
                   className="block w-full px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
                   onClick={() => {
                     printDoc();
@@ -2197,6 +2204,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
                   Export as PDF
                 </button>
                 <button
+                  type="button"
                   className="block w-full px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
                   onClick={() => {
                     exportWord();
@@ -2206,6 +2214,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
                   Export as Word (.doc)
                 </button>
                 <button
+                  type="button"
                   className="block w-full px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
                   onClick={() => {
                     if (editor)
@@ -2221,6 +2230,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
                 </button>
                 <div className="my-1 border-t border-gray-200 dark:border-gray-700" />
                 <button
+                  type="button"
                   className="block w-full px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
                   onClick={() => {
                     if (editor)
@@ -2235,6 +2245,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
                   Export as HTML
                 </button>
                 <button
+                  type="button"
                   className="block w-full px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
                   onClick={() => {
                     if (editor)
@@ -2372,7 +2383,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
                   type="button"
                   title="Close"
                   onClick={() => setImageMenu(null)}
-                  className="flex h-7 w-7 items-center justify-center rounded text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
+                  className="flex size-7 items-center justify-center rounded text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
                 >
                   <X size={15} />
                 </button>
@@ -2508,6 +2519,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
         <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-gray-900">
           <input
             ref={findInputRef}
+            aria-label="Find"
             placeholder="Find"
             onChange={(e) => editor?.chain().setSearchTerm(e.target.value).run()}
             onKeyDown={(e) => {
@@ -2540,6 +2552,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
           </TBtn>
 
           <input
+            aria-label="Replace with"
             placeholder="Replace with"
             value={replaceValue}
             onChange={(e) => {
@@ -2549,6 +2562,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
             className="h-8 w-44 rounded border border-gray-300 bg-white px-2 text-sm outline-none focus:border-blue-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
           />
           <button
+            type="button"
             disabled={!matchCount}
             onClick={() => editor?.chain().focus().replaceCurrent().run()}
             className="h-8 rounded border border-gray-300 bg-white px-2 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-40 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
@@ -2556,6 +2570,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
             Replace
           </button>
           <button
+            type="button"
             disabled={!matchCount}
             onClick={() => editor?.chain().focus().replaceAll().run()}
             className="h-8 rounded border border-gray-300 bg-white px-2 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-40 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
@@ -2563,9 +2578,10 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
             Replace all
           </button>
           <button
+            type="button"
             title="Close"
             onClick={() => setShowFind(false)}
-            className="ml-auto flex h-8 w-8 items-center justify-center rounded text-gray-500 hover:bg-gray-200 dark:text-gray-400 dark:hover:bg-gray-700"
+            className="ml-auto flex size-8 items-center justify-center rounded text-gray-500 hover:bg-gray-200 dark:text-gray-400 dark:hover:bg-gray-700"
           >
             <X size={16} />
           </button>
@@ -2585,9 +2601,10 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
               </p>
             ) : (
               <ul className="space-y-0.5">
-                {headings.map((h, i) => (
-                  <li key={i}>
+                {headings.map((h) => (
+                  <li key={`${h.pos}-${h.level}`}>
                     <button
+                      type="button"
                       onClick={() =>
                         editor
                           ?.chain()
