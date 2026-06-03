@@ -295,7 +295,7 @@ export default function DocumentWorkspace({ docId }: { docId: string }) {
   const [status, setStatus] = useState<string | null>(null);
   const [chatOpen, setChatOpen] = useState(true);
 
-  // The document being edited, loaded from localStorage on mount. Held in state
+  // The document being edited, loaded from Supabase on mount. Held in state
   // (rather than read inline) so the editor mounts only once the HTML is
   // available — see the loading guard before the main render below.
   const [doc, setDoc] = useState<StoredDocument | null>(null);
@@ -343,6 +343,11 @@ export default function DocumentWorkspace({ docId }: { docId: string }) {
   // (used for Drive previews and search), and the current title.
   useEffect(() => {
     if (!doc) return;
+    // The editor reports its HTML via a "transaction" event, which doesn't fire
+    // until it has mounted. Until then documentContext.html is "" — and an empty
+    // editor serializes to "<p></p>", never "" — so a "" here means "not loaded
+    // yet". Skip the write so we never overwrite a saved document with nothing.
+    if (!documentContext.html) return;
     const timer = window.setTimeout(() => {
       void updateDocument(docId, {
         title: title.trim() || UNTITLED,
@@ -354,8 +359,10 @@ export default function DocumentWorkspace({ docId }: { docId: string }) {
   }, [doc, docId, title, documentContext.html, documentContext.text]);
 
   async function backToDrive() {
-    // Flush any pending edits immediately so the Drive preview is current.
-    if (doc) {
+    // Flush any pending edits immediately so the Drive preview is current. Gated
+    // on documentContext.html for the same reason as the autosave effect above:
+    // don't flush an empty snapshot before the editor has reported its content.
+    if (doc && documentContext.html) {
       await updateDocument(docId, {
         title: title.trim() || UNTITLED,
         html: documentContext.html,
@@ -551,7 +558,7 @@ export default function DocumentWorkspace({ docId }: { docId: string }) {
     }
   }
 
-  // Wait for the document to load from localStorage before mounting the editor,
+  // Wait for the document to load from Supabase before mounting the editor,
   // so it receives the saved HTML as its initial content. (If the document is
   // missing, the load effect has already redirected to the Drive home.)
   if (!doc) {
