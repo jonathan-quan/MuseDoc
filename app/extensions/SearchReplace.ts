@@ -58,8 +58,10 @@ function processSearches(
     }
   });
 
+  // Built once and reused across blocks; reset lastIndex per block below.
+  const re = new RegExp(escapeRegExp(searchTerm), caseSensitive ? "g" : "gi");
   for (const { text, pos } of merged.filter(Boolean)) {
-    const re = new RegExp(escapeRegExp(searchTerm), caseSensitive ? "g" : "gi");
+    re.lastIndex = 0;
     let m: RegExpExecArray | null;
     while ((m = re.exec(text)) !== null) {
       results.push({ from: pos + m.index, to: pos + m.index + m[0].length });

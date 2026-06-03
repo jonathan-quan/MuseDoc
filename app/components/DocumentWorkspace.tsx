@@ -226,7 +226,7 @@ function DiffText({
         if (part.type === "delete") {
           return (
             <mark
-              key={index}
+              key={`${index}-del`}
               className="rounded bg-red-100 px-0.5 text-red-800 line-through decoration-red-500 dark:bg-red-500/25 dark:text-red-200"
             >
               {part.text}
@@ -236,14 +236,14 @@ function DiffText({
         if (part.type === "insert") {
           return (
             <mark
-              key={index}
+              key={`${index}-ins`}
               className="rounded bg-green-100 px-0.5 text-green-900 dark:bg-green-500/25 dark:text-green-200"
             >
               {part.text}
             </mark>
           );
         }
-        return <span key={index}>{part.text}</span>;
+        return <span key={`${index}-eq`}>{part.text}</span>;
       })}
     </p>
   );
@@ -578,7 +578,7 @@ export default function DocumentWorkspace({ docId }: { docId: string }) {
             onClick={backToDrive}
             title="Back to MuseDoc"
             aria-label="Back to MuseDoc"
-            className="flex h-8 w-8 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
+            className="flex size-8 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
           >
             <ArrowLeft size={18} />
           </button>
@@ -690,6 +690,8 @@ export default function DocumentWorkspace({ docId }: { docId: string }) {
           <div
             role="separator"
             aria-orientation="vertical"
+            aria-label="Resize assistant panel"
+            tabIndex={0}
             title="Drag to resize"
             onMouseDown={startResize}
             className="w-1.5 shrink-0 cursor-col-resize bg-gray-200 transition-colors hover:bg-blue-400 dark:bg-gray-800 dark:hover:bg-blue-500"
@@ -709,16 +711,16 @@ export default function DocumentWorkspace({ docId }: { docId: string }) {
               onClick={() => setChatOpen(false)}
               title="Close assistant"
               aria-label="Close assistant"
-              className="flex h-7 w-7 items-center justify-center rounded-md text-gray-500 hover:bg-gray-200 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
+              className="flex size-7 items-center justify-center rounded-md text-gray-500 hover:bg-gray-200 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
             >
               <X size={16} />
             </button>
           </div>
 
-          <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
+          <div className="flex-1 space-y-4 overflow-y-auto p-4">
             {messages.map((m, i) => (
               <div
-                key={i}
+                key={`${m.role}-${i}`}
                 className={
                   m.role === "user"
                     ? "flex justify-end"
@@ -742,7 +744,7 @@ export default function DocumentWorkspace({ docId }: { docId: string }) {
               </div>
             ))}
             {isSending && (
-              <div className="text-xs font-medium text-gray-400 dark:text-gray-500">Thinking...</div>
+              <div className="text-xs font-medium text-gray-400 dark:text-gray-500">Thinking…</div>
             )}
           </div>
 
@@ -779,6 +781,7 @@ export default function DocumentWorkspace({ docId }: { docId: string }) {
               ref={fileInputRef}
               type="file"
               multiple
+              aria-label="Attach files"
               onChange={addFiles}
               className="hidden"
             />
@@ -795,14 +798,15 @@ export default function DocumentWorkspace({ docId }: { docId: string }) {
                 }}
                 rows={2}
                 placeholder="Ask the assistant..."
-                className="max-h-32 min-h-12 w-full resize-none bg-transparent px-1 py-1 text-sm text-gray-800 outline-none placeholder:text-gray-400 dark:text-gray-100 dark:placeholder:text-gray-500"
+                aria-label="Message the assistant"
+                className="max-h-32 min-h-12 w-full resize-none bg-transparent p-1 text-sm text-gray-800 outline-none placeholder:text-gray-400 dark:text-gray-100 dark:placeholder:text-gray-500"
               />
               <div className="mt-1 flex items-center gap-2">
                 <button
                   type="button"
                   title="Attach files"
                   onClick={() => fileInputRef.current?.click()}
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-100"
+                  className="flex size-8 shrink-0 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-100"
                 >
                   <Paperclip size={17} />
                 </button>
@@ -810,7 +814,7 @@ export default function DocumentWorkspace({ docId }: { docId: string }) {
                   type="button"
                   title={isRecording ? "Stop recording" : "Record voice"}
                   onClick={toggleRecording}
-                  className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
+                  className={`flex size-8 shrink-0 items-center justify-center rounded-full ${
                     isRecording
                       ? "bg-red-50 text-red-600 dark:bg-red-950 dark:text-red-400"
                       : "text-gray-500 hover:bg-gray-100 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-100"
@@ -835,7 +839,7 @@ export default function DocumentWorkspace({ docId }: { docId: string }) {
                   title="Send"
                   onClick={() => void sendMessage()}
                   disabled={!input.trim() || isSending}
-                  className="ml-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-900 text-white disabled:cursor-not-allowed disabled:opacity-40 dark:bg-gray-100 dark:text-gray-900"
+                  className="ml-auto flex size-9 shrink-0 items-center justify-center rounded-full bg-gray-900 text-white disabled:cursor-not-allowed disabled:opacity-40 dark:bg-gray-100 dark:text-gray-900"
                 >
                   <SendHorizontal size={17} />
                 </button>
