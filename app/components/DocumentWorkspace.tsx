@@ -64,12 +64,11 @@ type RequestType =
 const modelOptions: {
   label: string;
   value: OpenAIModel;
-  descriptor: string;
 }[] = [
-  { label: "GPT-5.4 Mini", value: "gpt-5.4-mini", descriptor: "Free" },
-  { label: "GPT-5.4", value: "gpt-5.4", descriptor: "Plus" },
-  { label: "GPT-5.5", value: "gpt-5.5", descriptor: "Plus" },
-  { label: "GPT-5.5 Pro", value: "gpt-5.5-pro", descriptor: "Pro" },
+  { label: "GPT-5.4 Mini", value: "gpt-5.4-mini" },
+  { label: "GPT-5.4", value: "gpt-5.4" },
+  { label: "GPT-5.5", value: "gpt-5.5" },
+  { label: "GPT-5.5 Pro", value: "gpt-5.5-pro" },
 ];
 
 function ModelPicker({
@@ -125,12 +124,8 @@ function ModelPicker({
                   >
                     {option.label}
                   </span>
-                  {active ? (
+                  {active && (
                     <Check size={16} className="shrink-0 text-gray-900 dark:text-gray-100" />
-                  ) : (
-                    <span className="shrink-0 text-xs text-gray-400 dark:text-gray-500">
-                      {option.descriptor}
-                    </span>
                   )}
                 </button>
               );
