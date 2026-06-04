@@ -2,7 +2,6 @@
 
 import {
   useEffect,
-  useMemo,
   useRef,
   useState,
   type ChangeEvent,
@@ -179,51 +178,6 @@ function readFile(file: File): Promise<Attachment> {
   });
 }
 
-/**
- * Suggest a few prompts the user might want to send, based on the current
- * document. Maps the document's section headings to targeted edit prompts
- * ("Polish the education section") and rounds out with general writing help.
- * Returns starter prompts when the document is essentially empty.
- */
-function buildSuggestions(html: string, text: string): string[] {
-  if (typeof window === "undefined") return [];
-  if (text.trim().length < 40) {
-    return [
-      "Draft an outline for me",
-      "Write an introduction",
-      "Help me brainstorm ideas",
-    ];
-  }
-
-  let headings: string[] = [];
-  try {
-    const doc = new DOMParser().parseFromString(html, "text/html");
-    const pick = (selector: string) =>
-      Array.from(doc.querySelectorAll(selector))
-        .map((el) => (el.textContent ?? "").trim())
-        .filter(Boolean);
-    headings = pick("h2, h3");
-    if (!headings.length) headings = pick("h1");
-  } catch {
-    headings = [];
-  }
-  headings = [...new Set(headings)].filter((h) => h.length <= 40);
-
-  const hasBullets = /<li[ >]/i.test(html);
-  const out: string[] = [];
-  if (headings[0]) out.push(`Polish the ${headings[0].toLowerCase()} section`);
-  if (headings[1]) {
-    out.push(
-      hasBullets
-        ? `Strengthen the ${headings[1].toLowerCase()} bullets`
-        : `Improve the ${headings[1].toLowerCase()} section`
-    );
-  }
-  out.push("Fix grammar and spelling");
-  out.push("Improve the overall flow and clarity");
-  return [...new Set(out)].slice(0, 4);
-}
-
 export default function DocumentWorkspace({
   docId,
   guest = false,
@@ -282,13 +236,6 @@ export default function DocumentWorkspace({
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const [chatWidth, setChatWidth] = useState(384);
-
-  // Prompt suggestions tailored to the current document, shown as chips above
-  // the chat input until the conversation gets going.
-  const suggestions = useMemo(
-    () => buildSuggestions(documentContext.html, documentContext.text),
-    [documentContext.html, documentContext.text]
-  );
 
   // Load the document for this route from Supabase. If it doesn't exist (bad or
   // stale URL, or not the signed-in user's), send the user back to Drive home.
@@ -785,21 +732,6 @@ export default function DocumentWorkspace({
               onChange={addFiles}
               className="hidden"
             />
-
-            {suggestions.length > 0 && !input.trim() && !isSending && (
-              <div className="mb-2 flex flex-col items-end gap-2">
-                {suggestions.map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => void sendMessage(s)}
-                    className="max-w-[85%] rounded-xl border border-gray-200 bg-white px-4 py-3 text-right text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100 dark:border-gray-700 dark:bg-gray-800/60 dark:text-gray-100 dark:hover:bg-gray-800"
-                  >
-                    {s}
-                  </button>
-                ))}
-              </div>
-            )}
 
             <div className="rounded-[1.35rem] border border-gray-300 bg-white px-3 py-2 shadow-sm focus-within:border-gray-400 focus-within:shadow dark:border-gray-700 dark:bg-gray-800 dark:focus-within:border-gray-600">
               <textarea
