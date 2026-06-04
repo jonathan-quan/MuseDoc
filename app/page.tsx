@@ -54,12 +54,6 @@ export default function Landing() {
           <Feather size={22} className="text-gray-900 dark:text-gray-100" />
           <span className="text-xl font-semibold tracking-tight">MuseDoc</span>
         </Link>
-        <nav className="ml-4 hidden items-center gap-6 text-sm font-medium text-gray-600 md:flex dark:text-gray-300">
-          <a href="#features" className="hover:text-gray-900 dark:hover:text-white">Docs</a>
-          <a href="#features" className="hover:text-gray-900 dark:hover:text-white">Rewriter</a>
-          <a href="#features" className="hover:text-gray-900 dark:hover:text-white">Help</a>
-          <a href="#features" className="hover:text-gray-900 dark:hover:text-white">Pricing</a>
-        </nav>
         <div className="ml-auto flex items-center gap-3">
           <button
             type="button"
@@ -89,19 +83,8 @@ export default function Landing() {
       </header>
 
       <main className="px-6 pb-20 lg:px-10">
-        {/* Secondary, muted feature links */}
-        <nav
-          id="features"
-          className="mb-8 flex flex-wrap gap-x-8 gap-y-2 text-sm text-gray-400 dark:text-gray-500"
-        >
-          <span>AI Agent</span>
-          <span>Import your Documents</span>
-          <span>Build your Workflow</span>
-          <span>Why MuseDoc?</span>
-        </nav>
-
         {/* ── Hero copy ────────────────────────────────────── */}
-        <h1 className="max-w-4xl text-5xl font-semibold tracking-tight lg:text-6xl">
+        <h1 className="mt-4 max-w-4xl text-5xl font-semibold tracking-tight lg:text-6xl">
           Proofread essays{" "}
           <span className="text-gray-400 dark:text-gray-500">with AI</span>
         </h1>
@@ -112,29 +95,27 @@ export default function Landing() {
 
         <div className="mt-8 flex flex-col gap-4 lg:flex-row lg:items-center">
           <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setAuthMode("signup")}
+            <Link
+              href="/try"
               className="rounded-lg bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700"
             >
               Start Writing
-            </button>
-            <button
-              type="button"
-              onClick={() => setAuthMode("signup")}
+            </Link>
+            <Link
+              href="/try?import=1"
               className="rounded-lg border border-gray-300 bg-white px-5 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-100 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
             >
               Import Document
-            </button>
+            </Link>
           </div>
           <p className="text-base text-gray-400 lg:ml-6 dark:text-gray-500">
             Easily switch between writing and prompting, in the same interface
           </p>
         </div>
 
-        {/* ── Product mockup (static, non-interactive) ─────── */}
-        <div className="mt-10" aria-hidden>
-          <HeroMockup />
+        {/* ── Product demo ─────────────────────────────────── */}
+        <div className="mt-10">
+          <HeroDemo />
         </div>
       </main>
 
@@ -142,6 +123,29 @@ export default function Landing() {
         <AuthDialog initialMode={authMode} onClose={() => setAuthMode(null)} />
       )}
     </div>
+  );
+}
+
+/**
+ * Hero showcase. Plays your demo video if one exists at public/demo.mp4 (just
+ * drop a recording there — .mp4 or .webm), otherwise falls back to the static
+ * editor mockup below. No code change needed when you add the file.
+ */
+function HeroDemo() {
+  const [showMockup, setShowMockup] = useState(false);
+  if (showMockup) return <HeroMockup />;
+  return (
+    <video
+      src="/demo.mp4"
+      autoPlay
+      muted
+      loop
+      playsInline
+      controls
+      aria-label="MuseDoc product demo"
+      onError={() => setShowMockup(true)}
+      className="w-full overflow-hidden rounded-2xl border border-gray-200 shadow-sm dark:border-gray-800"
+    />
   );
 }
 

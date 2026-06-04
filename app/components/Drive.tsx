@@ -25,6 +25,7 @@ import {
   type StoredDocument,
 } from "../lib/documents";
 import { templates } from "../lib/templates";
+import UserMenu from "./UserMenu";
 
 type View = "home" | "recent" | "starred" | "trash";
 
@@ -413,6 +414,7 @@ export default function Drive({
             {theme === "dark" ? <Moon size={12} /> : <Sun size={12} />}
           </span>
         </button>
+        <UserMenu />
       </header>
 
       <div className="flex min-h-0 flex-1">

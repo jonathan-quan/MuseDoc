@@ -651,6 +651,8 @@ export type EditorHandle = {
    *  `replace` (empty `replace` deletes it), preserving everything else. */
   replaceText: (find: string, replace: string) => boolean;
   applyAssistantActions: (actions: AssistantEditorAction[]) => void;
+  /** Open the file picker for importing a PDF/Word/text/HTML document. */
+  openImport: () => void;
 };
 
 export type AssistantEditorAction =
@@ -1005,6 +1007,9 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
   useImperativeHandle(
     ref,
     () => ({
+      openImport() {
+        importInputRef.current?.click();
+      },
       replaceText(find: string, replace: string) {
         if (!editor) return false;
         const query = find.trim();
