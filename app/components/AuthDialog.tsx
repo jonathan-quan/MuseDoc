@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { X } from "lucide-react";
+import { Feather, X } from "lucide-react";
 import { createClient } from "../lib/supabase/client";
 
 type Mode = "signin" | "signup";
@@ -101,9 +101,12 @@ export default function AuthDialog({
           <X size={16} />
         </button>
 
-        <h1 className="text-center text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">
-          MuseDoc
-        </h1>
+        <div className="flex items-center justify-center gap-2">
+          <Feather size={20} className="text-gray-900 dark:text-gray-100" />
+          <h1 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">
+            MuseDoc
+          </h1>
+        </div>
         <p className="mt-1 text-center text-sm text-gray-500 dark:text-gray-400">
           {mode === "signin" ? "Sign in to your account" : "Create an account"}
         </p>

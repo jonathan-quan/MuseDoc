@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Clock,
+  Feather,
   FileText,
   Grid2x2,
   Home,
@@ -378,10 +379,8 @@ export default function Drive({
       {/* Top bar */}
       <header className="flex shrink-0 items-center gap-4 px-4 py-3">
         <div className="flex w-56 items-center gap-2">
-          <div className="flex size-9 items-center justify-center rounded-lg bg-blue-600 text-white">
-            <FileText size={18} />
-          </div>
-          <span className="text-xl font-medium text-gray-700 dark:text-gray-200">
+          <Feather size={22} className="text-gray-900 dark:text-gray-100" />
+          <span className="text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">
             MuseDoc
           </span>
         </div>
