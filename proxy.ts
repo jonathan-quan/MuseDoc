@@ -39,16 +39,20 @@ export async function proxy(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const { pathname } = request.nextUrl;
-  // Public paths that an unauthenticated visitor is allowed to reach. "/" is
-  // the marketing landing page (which hosts the login modal); the signed-in
-  // app lives under /drive and /doc.
-  const isPublic =
-    pathname === "/" ||
-    pathname.startsWith("/try") ||
-    pathname.startsWith("/auth") ||
-    pathname.startsWith("/api");
+  // The signed-in app lives under these prefixes. We gate by an explicit
+  // allowlist (rather than "everything that isn't public") so that unknown
+  // URLs fall through to Next's 404 instead of bouncing logged-out visitors to
+  // the login modal — otherwise typos and crawlers all 307 to "/?login=1" and
+  // the not-found page is unreachable when signed out.
+  //
+  // ⚠️ When you add a new authenticated route, add its prefix here, or it will
+  // be publicly reachable.
+  const isProtected =
+    pathname === "/drive" ||
+    pathname.startsWith("/drive/") ||
+    pathname.startsWith("/doc");
 
-  if (!user && !isPublic) {
+  if (!user && isProtected) {
     // Send them to the landing page with the login modal open.
     const url = request.nextUrl.clone();
     url.pathname = "/";

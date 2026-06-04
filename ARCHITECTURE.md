@@ -41,9 +41,10 @@ over HTTPS. The logic lives locally; only the data lives on Supabase.
 Browser
   │
   ▼
-proxy.ts ─ refresh Supabase session, then gate:
-  ├─ not signed in ───────────► redirect to / (opens login modal)
-  └─ signed in ──────────────► render the matched App Router route
+proxy.ts ─ refresh Supabase session, then gate the protected prefixes
+           (/drive, /doc); other paths fall through (so unknown URLs 404):
+  ├─ protected + not signed in ─► redirect to /?login=1 (opens login modal)
+  └─ otherwise ─────────────────► render the matched App Router route
                                   │
                                   ├─ data:  app/lib/documents.ts ──► Supabase (Postgres, RLS)
                                   └─ AI:    /api/chat, /api/transcribe ──► OpenAI
@@ -143,7 +144,7 @@ keeps one user's data private, not the key.
 ## Auth flow
 
 0. `/` is the public landing page and hosts the login modal. Signed-in visitors hitting `/` are redirected to `/drive`.
-1. Visitor hits a gated route (`/drive`, `/doc/...`) → `proxy.ts` sees no session → redirect to `/?login=1` (landing with the modal open).
+1. Visitor hits a protected route (`/drive`, `/doc/...`) → `proxy.ts` sees no session → redirect to `/?login=1` (landing with the modal open). Other paths are not gated, so unknown URLs render Next's 404 instead of bouncing to login.
 2. **Email/password:** `AuthDialog` calls `signInWithPassword` (or `signUp`,
    which emails a confirmation link pointing at `/auth/callback`).
 3. **Google:** `signInWithOAuth({ provider: "google" })` → Google →
@@ -178,9 +179,10 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=…  Supabase publishable/anon key (safe in the br
 
 ## Known follow-ups / not yet done
 
-- `/api/chat` and `/api/transcribe` are **not auth-gated** (the proxy skips
-  `/api`). Anyone with the URL could spend the OpenAI key. Add a `getUser()`
-  check in each route to lock them down.
+- `/api/chat` and `/api/transcribe` are auth-gated **inside the route handlers**
+  (each calls `getUser()` and returns 401 when signed out) and metered against
+  the per-user daily credit cap — the proxy does not gate `/api`, the routes
+  gate themselves.
 
 ## Commands
 

@@ -7,10 +7,18 @@
 import { NextResponse } from "next/server";
 import { createClient } from "../../lib/supabase/server";
 
+// Only allow same-origin, absolute internal paths as the post-login
+// destination. Anything else (external URLs, protocol-relative "//evil.com",
+// backslash tricks, or a bare host that would make `${origin}${next}` resolve
+// to another domain) falls back to /drive — closing an open-redirect hole.
+function safeNext(value: string | null): string {
+  return value && /^\/(?![/\\])/.test(value) ? value : "/drive";
+}
+
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
-  const next = searchParams.get("next") ?? "/drive";
+  const next = safeNext(searchParams.get("next"));
 
   if (code) {
     const supabase = await createClient();
