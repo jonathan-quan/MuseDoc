@@ -214,6 +214,10 @@ export default function DocumentWorkspace({
   const [shown, setShown] = useState(0);
   const [isRecording, setIsRecording] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+  // Autosave indicator shown in the header. null until the first save runs.
+  const [saveState, setSaveState] = useState<"saving" | "saved" | "error" | null>(
+    null
+  );
   const [chatOpen, setChatOpen] = useState(true);
   // Guests can open the editor but must sign in to use the AI; this shows the
   // auth modal when they try.
@@ -298,14 +302,22 @@ export default function DocumentWorkspace({
     // Also pause while an inline edit diff is under review, so the temporary
     // green/red diff markup is never persisted.
     if (guest || reviewing || !doc || !docId || !documentContext.html) return;
-    const timer = window.setTimeout(() => {
-      void updateDocument(docId, {
+    let cancelled = false;
+    setSaveState("saving");
+    const timer = window.setTimeout(async () => {
+      const saved = await updateDocument(docId, {
         title: title.trim() || UNTITLED,
         html: documentContext.html,
         text: documentContext.text,
       });
+      // A newer edit (or unmount) supersedes this write — don't let its result
+      // overwrite the fresher status.
+      if (!cancelled) setSaveState(saved ? "saved" : "error");
     }, 600);
-    return () => window.clearTimeout(timer);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
   }, [
     guest,
     reviewing,
@@ -598,6 +610,25 @@ export default function DocumentWorkspace({
             placeholder={UNTITLED}
             className="ml-1 w-64 rounded-md px-2 py-1 text-sm text-gray-600 outline-none hover:bg-gray-50 focus:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800 dark:focus:bg-gray-800"
           />
+          {!guest && saveState && (
+            <span
+              className={`flex items-center gap-1 text-xs ${
+                saveState === "error"
+                  ? "text-red-600 dark:text-red-400"
+                  : "text-gray-400 dark:text-gray-500"
+              }`}
+            >
+              {saveState === "saving"
+                ? "Saving…"
+                : saveState === "error"
+                ? "Couldn't save — check your connection"
+                : (
+                  <>
+                    <Check size={13} /> Saved
+                  </>
+                )}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-3">
           <button
