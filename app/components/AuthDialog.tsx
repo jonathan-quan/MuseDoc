@@ -1,20 +1,40 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import { X } from "lucide-react";
 import { createClient } from "../lib/supabase/client";
 
 type Mode = "signin" | "signup";
 
-export default function LoginPage() {
+/**
+ * Sign-in / sign-up shown as a modal over the landing page (there is no
+ * standalone /login route). Closes on backdrop click, Escape, or the X.
+ */
+export default function AuthDialog({
+  initialMode = "signin",
+  onClose,
+}: {
+  initialMode?: Mode;
+  onClose: () => void;
+}) {
   const router = useRouter();
   const [supabase] = useState(() => createClient());
-  const [mode, setMode] = useState<Mode>("signin");
+  const [mode, setMode] = useState<Mode>(initialMode);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // Close on Escape.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
 
   async function handleEmail(e: FormEvent) {
     e.preventDefault();
@@ -23,13 +43,17 @@ export default function LoginPage() {
     setInfo(null);
 
     if (mode === "signup") {
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: { emailRedirectTo: `${location.origin}/auth/callback` },
       });
       if (error) setError(error.message);
-      else {
+      else if (data.session) {
+        // Email confirmation is disabled — the user is signed in immediately.
+        router.push("/drive");
+        router.refresh();
+      } else {
         setInfo("Check your email to confirm your account, then sign in.");
         setMode("signin");
       }
@@ -40,7 +64,7 @@ export default function LoginPage() {
       });
       if (error) setError(error.message);
       else {
-        router.push("/");
+        router.push("/drive");
         router.refresh();
       }
     }
@@ -57,8 +81,26 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-full items-center justify-center bg-gray-50 px-4 dark:bg-gray-950">
-      <div className="w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-8 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onMouseDown={onClose}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={mode === "signin" ? "Sign in" : "Create an account"}
+        onMouseDown={(e) => e.stopPropagation()}
+        className="relative w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-8 shadow-xl dark:border-gray-800 dark:bg-gray-900"
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close"
+          className="absolute right-3 top-3 flex size-8 items-center justify-center rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+        >
+          <X size={16} />
+        </button>
+
         <h1 className="text-center text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">
           MuseDoc
         </h1>

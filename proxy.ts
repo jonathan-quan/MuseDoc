@@ -2,7 +2,8 @@
 // node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/proxy.md).
 //
 // Runs before every matched route to (1) refresh the Supabase auth session so
-// its cookies stay fresh, and (2) bounce signed-out visitors to /login. Proxy
+// its cookies stay fresh, and (2) bounce signed-out visitors to the landing
+// page (which hosts the login modal). Proxy
 // defaults to the Node.js runtime in this version, which Supabase needs.
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
@@ -38,22 +39,28 @@ export async function proxy(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const { pathname } = request.nextUrl;
-  // Public paths that an unauthenticated visitor is allowed to reach.
+  // Public paths that an unauthenticated visitor is allowed to reach. "/" is
+  // the marketing landing page (which hosts the login modal); the signed-in
+  // app lives under /drive and /doc.
   const isPublic =
-    pathname.startsWith("/login") ||
+    pathname === "/" ||
     pathname.startsWith("/auth") ||
     pathname.startsWith("/api");
 
   if (!user && !isPublic) {
+    // Send them to the landing page with the login modal open.
     const url = request.nextUrl.clone();
-    url.pathname = "/login";
+    url.pathname = "/";
+    url.search = "";
+    url.searchParams.set("login", "1");
     return NextResponse.redirect(url);
   }
 
-  // Already signed in? Skip the login page.
-  if (user && pathname.startsWith("/login")) {
+  // Already signed in? Skip the marketing landing — go straight to the Drive.
+  if (user && pathname === "/") {
     const url = request.nextUrl.clone();
-    url.pathname = "/";
+    url.pathname = "/drive";
+    url.search = "";
     return NextResponse.redirect(url);
   }
 

@@ -42,7 +42,7 @@ Browser
   │
   ▼
 proxy.ts ─ refresh Supabase session, then gate:
-  ├─ not signed in ───────────► redirect to /login
+  ├─ not signed in ───────────► redirect to / (opens login modal)
   └─ signed in ──────────────► render the matched App Router route
                                   │
                                   ├─ data:  app/lib/documents.ts ──► Supabase (Postgres, RLS)
@@ -53,7 +53,7 @@ proxy.ts ─ refresh Supabase session, then gate:
 
 ```
 proxy.ts                     Runs before every route. Refreshes the Supabase
-                             session and redirects signed-out users to /login.
+                             session and redirects signed-out users to / (modal).
                              (Next 16's replacement for middleware.ts.)
 
 app/
@@ -61,17 +61,22 @@ app/
 │                            theme before paint (no dark-mode flash).
 ├── globals.css              Tailwind + editor styles.
 │
-├── page.tsx                 "/"  — Drive home. Loads doc list + storage usage
-│                            from Supabase, renders <Drive>. Handlers are async.
+├── page.tsx                 "/"  — public marketing landing page (hero + a
+│                            static mockup of the editor). Signed-in visitors
+│                            are redirected to /drive by the proxy.
 │
-├── login/page.tsx           "/login" — email/password + "Continue with Google".
+├── drive/page.tsx           "/drive" — Drive home (signed-in). Loads doc list +
+│                            storage usage from Supabase, renders <Drive>.
+│
+│                            (Login is a modal — app/components/AuthDialog.tsx;
+│                            there is no /login route.)
 │
 ├── doc/[id]/page.tsx        "/doc/:id" — thin server segment; awaits params and
 │                            hands the id to <DocumentWorkspace>.
 │
 ├── auth/
 │   ├── callback/route.ts    GET  — exchanges an OAuth / email ?code for a session.
-│   └── signout/route.ts     POST — signs out, redirects to /login.
+│   └── signout/route.ts     POST — signs out, redirects to / (landing).
 │
 ├── api/
 │   ├── chat/route.ts        POST — AI assistant. Classifies the request
@@ -81,6 +86,7 @@ app/
 │   └── transcribe/route.ts  POST — voice → text via OpenAI whisper-1.
 │
 ├── components/
+│   ├── AuthDialog.tsx       Sign-in / sign-up modal, opened from the landing.
 │   ├── Drive.tsx            Drive-style home: grid/list view, star, trash,
 │   │                        rename, templates, storage meter, sign-out button.
 │   ├── DocumentWorkspace.tsx Editor page: TipTap editor + AI chat panel,
@@ -136,8 +142,9 @@ keeps one user's data private, not the key.
 
 ## Auth flow
 
-1. Visitor hits any gated route → `proxy.ts` sees no session → redirect `/login`.
-2. **Email/password:** `login/page.tsx` calls `signInWithPassword` (or `signUp`,
+0. `/` is the public landing page and hosts the login modal. Signed-in visitors hitting `/` are redirected to `/drive`.
+1. Visitor hits a gated route (`/drive`, `/doc/...`) → `proxy.ts` sees no session → redirect to `/?login=1` (landing with the modal open).
+2. **Email/password:** `AuthDialog` calls `signInWithPassword` (or `signUp`,
    which emails a confirmation link pointing at `/auth/callback`).
 3. **Google:** `signInWithOAuth({ provider: "google" })` → Google →
    Supabase → back to `/auth/callback?code=…`.
@@ -160,7 +167,6 @@ keeps one user's data private, not the key.
 OPENAI_API_KEY=…                 server-only; used by /api routes. Keep out of NEXT_PUBLIC_*.
 NEXT_PUBLIC_SUPABASE_URL=…        Supabase project URL
 NEXT_PUBLIC_SUPABASE_ANON_KEY=…  Supabase publishable/anon key (safe in the browser)
-NEXT_PUBLIC_DISABLE_AUTH=true     TEMPORARY login bypass — remove once auth is live
 ```
 
 ## One-time Supabase setup (dashboard)
@@ -174,9 +180,7 @@ NEXT_PUBLIC_DISABLE_AUTH=true     TEMPORARY login bypass — remove once auth is
 
 - `/api/chat` and `/api/transcribe` are **not auth-gated** (the proxy skips
   `/api`). Anyone with the URL could spend the OpenAI key. Add a `getUser()`
-  check in each route once login is live and the bypass is removed.
-- Remove `NEXT_PUBLIC_DISABLE_AUTH` and the bypass block in `proxy.ts` before
-  relying on login.
+  check in each route to lock them down.
 
 ## Commands
 
