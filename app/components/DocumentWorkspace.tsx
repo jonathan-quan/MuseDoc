@@ -826,22 +826,7 @@ export default function DocumentWorkspace({
           </div>
 
           <div className="flex-1 space-y-4 overflow-y-auto p-4">
-            {messages.length <= 1 && suggestions.length > 0 && (
-              <div className="flex flex-col items-end gap-3">
-                {suggestions.map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => void sendMessage(s)}
-                    className="max-w-[85%] rounded-xl border border-gray-200 bg-white px-4 py-3 text-right text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100 dark:border-gray-700 dark:bg-gray-800/60 dark:text-gray-100 dark:hover:bg-gray-800"
-                  >
-                    {s}
-                  </button>
-                ))}
-              </div>
-            )}
-            {(messages.length > 1 || suggestions.length === 0) &&
-              messages.map((m, i) => (
+            {messages.map((m, i) => (
               <div
                 key={`${m.role}-${i}`}
                 className={
@@ -908,6 +893,21 @@ export default function DocumentWorkspace({
               onChange={addFiles}
               className="hidden"
             />
+
+            {suggestions.length > 0 && messages.length <= 1 && !isSending && (
+              <div className="mb-2 flex flex-col items-end gap-2">
+                {suggestions.map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => void sendMessage(s)}
+                    className="max-w-[85%] rounded-xl border border-gray-200 bg-white px-4 py-3 text-right text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100 dark:border-gray-700 dark:bg-gray-800/60 dark:text-gray-100 dark:hover:bg-gray-800"
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            )}
 
             <div className="rounded-[1.35rem] border border-gray-300 bg-white px-3 py-2 shadow-sm focus-within:border-gray-400 focus-within:shadow dark:border-gray-700 dark:bg-gray-800 dark:focus-within:border-gray-600">
               <textarea
