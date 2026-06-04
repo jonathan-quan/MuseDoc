@@ -68,3 +68,16 @@ create policy "Users can update their own chats"
   on public.document_chats for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "Users can delete their own chats"
   on public.document_chats for delete using (auth.uid() = user_id);
+
+-- ── AI usage metering (daily per-user spend cap) ────────────────────────────
+-- One row per user per UTC day, holding how much AI credit they've spent.
+-- Written ONLY by the server using the service-role key; RLS is enabled with no
+-- policies, so regular clients cannot read or tamper with their own balance.
+create table if not exists public.ai_usage (
+  user_id   uuid not null references auth.users (id) on delete cascade,
+  day       date not null default current_date,
+  spent_usd numeric not null default 0,
+  primary key (user_id, day)
+);
+
+alter table public.ai_usage enable row level security;

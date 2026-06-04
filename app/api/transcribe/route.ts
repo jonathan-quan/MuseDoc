@@ -1,3 +1,6 @@
+import { createClient } from "../../lib/supabase/server";
+import { CREDIT_CAP_USD, getDailySpend, recordSpend } from "../../lib/usage";
+
 type TranscriptionResponse = {
   text?: string;
   error?: { message?: string };
@@ -9,6 +12,21 @@ export async function POST(request: Request) {
     return Response.json(
       { error: "Missing OPENAI_API_KEY. Add it to your environment." },
       { status: 500 }
+    );
+  }
+
+  // Transcription requires a signed-in account and counts against the cap.
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return Response.json({ error: "Please sign in to use voice." }, { status: 401 });
+  }
+  if ((await getDailySpend(user.id)) >= CREDIT_CAP_USD) {
+    return Response.json(
+      { error: "You've used today's free AI credit. It resets tomorrow." },
+      { status: 429 }
     );
   }
 
@@ -36,6 +54,9 @@ export async function POST(request: Request) {
       { status: response.status }
     );
   }
+
+  // Whisper is billed by audio length; charge a small flat estimate per clip.
+  await recordSpend(user.id, 0.003);
 
   return Response.json({ text: payload.text ?? "" });
 }

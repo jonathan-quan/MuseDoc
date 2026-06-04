@@ -76,6 +76,7 @@ import {
 } from "lucide-react";
 import { Frame } from "../extensions/Frame";
 import { SearchReplace } from "../extensions/SearchReplace";
+import { DiffInsert, DiffDelete } from "../extensions/DiffMarks";
 
 type ImageFit = "contain" | "cover" | "fill";
 type ImageAlign = "left" | "center" | "right";
@@ -646,6 +647,53 @@ function TableGridPicker({
   );
 }
 
+type DiffSegment = { type: "equal" | "delete" | "insert"; text: string };
+
+function tokenizeForDiff(text: string): string[] {
+  return text.match(/\s+|[^\s]+/g) ?? [];
+}
+
+/** Word-level diff of two strings, with adjacent same-type tokens merged. */
+function diffSegments(original: string, next: string): DiffSegment[] {
+  const a = tokenizeForDiff(original);
+  const b = tokenizeForDiff(next);
+  const dp = Array.from({ length: a.length + 1 }, () =>
+    Array<number>(b.length + 1).fill(0)
+  );
+  for (let i = a.length - 1; i >= 0; i -= 1) {
+    for (let j = b.length - 1; j >= 0; j -= 1) {
+      dp[i][j] =
+        a[i] === b[j]
+          ? dp[i + 1][j + 1] + 1
+          : Math.max(dp[i + 1][j], dp[i][j + 1]);
+    }
+  }
+  const parts: DiffSegment[] = [];
+  const push = (type: DiffSegment["type"], text: string) => {
+    const last = parts[parts.length - 1];
+    if (last && last.type === type) last.text += text;
+    else parts.push({ type, text });
+  };
+  let i = 0;
+  let j = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) {
+      push("equal", a[i]);
+      i += 1;
+      j += 1;
+    } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+      push("delete", a[i]);
+      i += 1;
+    } else {
+      push("insert", b[j]);
+      j += 1;
+    }
+  }
+  while (i < a.length) push("delete", a[i++]);
+  while (j < b.length) push("insert", b[j++]);
+  return parts;
+}
+
 export type EditorHandle = {
   /** Locate `find` verbatim in the document and replace it in place with
    *  `replace` (empty `replace` deletes it), preserving everything else. */
@@ -653,6 +701,14 @@ export type EditorHandle = {
   applyAssistantActions: (actions: AssistantEditorAction[]) => void;
   /** Open the file picker for importing a PDF/Word/text/HTML document. */
   openImport: () => void;
+  /** Preview an edit inline: locate `find` and show a word-level diff in the
+   *  document (deletions red/struck, insertions green). Returns false if the
+   *  text can't be located. Resolve it with acceptDiff()/rejectDiff(). */
+  showDiff: (find: string, replace: string) => boolean;
+  /** Keep the inserted text, drop the deleted text, clear the diff marks. */
+  acceptDiff: () => void;
+  /** Restore the original text, clear the diff marks. */
+  rejectDiff: () => void;
 };
 
 export type AssistantEditorAction =
@@ -973,6 +1029,8 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
       TableCell,
       Frame,
       SearchReplace,
+      DiffInsert,
+      DiffDelete,
       Placeholder.configure({ placeholder: "Start writing…" }),
     ],
     content: initialContent || "",
@@ -1164,6 +1222,105 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
               .run();
           }
         }
+      },
+      showDiff(find: string, replace: string) {
+        if (!editor) return false;
+        const query = find.trim();
+        if (!query) return false;
+        const pattern = query
+          .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+          .replace(/\s+/g, "\\s+");
+        const re = new RegExp(pattern);
+
+        let from = -1;
+        let to = -1;
+        editor.state.doc.descendants((node, pos) => {
+          if (from !== -1) return false;
+          if (node.isTextblock && node.textContent) {
+            const match = re.exec(node.textContent);
+            if (match) {
+              from = pos + 1 + match.index;
+              to = from + match[0].length;
+            }
+          }
+          return from === -1;
+        });
+        if (from === -1) return false;
+
+        const current = editor.state.doc.textBetween(from, to, "\n");
+        const segments = diffSegments(current, replace);
+        const { schema } = editor.state;
+        const insMark = schema.marks.diffInsert;
+        const delMark = schema.marks.diffDelete;
+        const nodes = segments
+          .filter((seg) => seg.text.length > 0)
+          .map((seg) =>
+            seg.type === "equal"
+              ? schema.text(seg.text)
+              : seg.type === "delete"
+              ? schema.text(seg.text, [delMark.create()])
+              : schema.text(seg.text, [insMark.create()])
+          );
+        if (!nodes.length) return false;
+        editor.view.dispatch(
+          editor.state.tr.replaceWith(from, to, nodes).scrollIntoView()
+        );
+        return true;
+      },
+      acceptDiff() {
+        if (!editor) return;
+        const { schema } = editor.state;
+        const insMark = schema.marks.diffInsert;
+        const delMark = schema.marks.diffDelete;
+        const deletions: { from: number; to: number }[] = [];
+        const unmarks: { from: number; to: number }[] = [];
+        editor.state.doc.descendants((node, pos) => {
+          if (!node.isText) return;
+          if (node.marks.some((m) => m.type === delMark))
+            deletions.push({ from: pos, to: pos + node.nodeSize });
+          else if (node.marks.some((m) => m.type === insMark))
+            unmarks.push({ from: pos, to: pos + node.nodeSize });
+        });
+        let tr = editor.state.tr;
+        // Highest position first so earlier offsets stay valid.
+        [
+          ...deletions.map((r) => ({ ...r, del: true })),
+          ...unmarks.map((r) => ({ ...r, del: false })),
+        ]
+          .sort((a, b) => b.from - a.from)
+          .forEach((op) => {
+            tr = op.del
+              ? tr.delete(op.from, op.to)
+              : tr.removeMark(op.from, op.to, insMark);
+          });
+        editor.view.dispatch(tr);
+      },
+      rejectDiff() {
+        if (!editor) return;
+        const { schema } = editor.state;
+        const insMark = schema.marks.diffInsert;
+        const delMark = schema.marks.diffDelete;
+        const deletions: { from: number; to: number }[] = [];
+        const unmarks: { from: number; to: number }[] = [];
+        editor.state.doc.descendants((node, pos) => {
+          if (!node.isText) return;
+          if (node.marks.some((m) => m.type === insMark))
+            deletions.push({ from: pos, to: pos + node.nodeSize });
+          else if (node.marks.some((m) => m.type === delMark))
+            unmarks.push({ from: pos, to: pos + node.nodeSize });
+        });
+        let tr = editor.state.tr;
+        [
+          ...deletions.map((r) => ({ ...r, del: true })),
+          ...unmarks.map((r) => ({ ...r, del: false })),
+        ]
+          .sort((a, b) => b.from - a.from)
+          .forEach((op) => {
+            tr = op.del
+              ? tr.delete(op.from, op.to)
+              : tr.removeMark(op.from, op.to, delMark);
+          });
+        editor.view.dispatch(tr);
       },
     }),
     [editor]

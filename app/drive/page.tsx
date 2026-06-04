@@ -38,9 +38,43 @@ export default function DrivePage() {
   }
 
   useEffect(() => {
-    // refresh() only setState after awaiting the queries, not synchronously.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void refresh();
+    let cancelled = false;
+    (async () => {
+      // If a guest just signed in, turn their stashed draft into a real,
+      // saved document and open it — so they continue in the same doc.
+      let raw: string | null = null;
+      try {
+        raw = sessionStorage.getItem("musedoc.pendingDraft");
+      } catch {
+        raw = null;
+      }
+      if (raw) {
+        try {
+          sessionStorage.removeItem("musedoc.pendingDraft");
+        } catch {}
+        try {
+          const draft = JSON.parse(raw) as {
+            title?: string;
+            html?: string;
+            text?: string;
+          };
+          const created = await createDocument(draft.title, draft.html);
+          if (created) {
+            await updateDocument(created.id, { text: draft.text ?? "" });
+            if (!cancelled) router.replace(`/doc/${created.id}`);
+            return;
+          }
+        } catch {
+          // Fall through to the normal Drive view.
+        }
+      }
+      if (!cancelled) await refresh();
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Run once on mount. refresh/createDocument/router are stable for this view.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function handleCreate(templateId?: string) {
