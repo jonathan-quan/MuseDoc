@@ -204,6 +204,14 @@ export default function DocumentWorkspace({
   });
   const [reviewing, setReviewing] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  // Typewriter state: streams the latest assistant reply into its bubble word
+  // by word (like ChatGPT) instead of showing it all at once. `index` is the
+  // message being revealed, `words` keeps whitespace tokens so spacing is
+  // preserved, and `shown` is how many tokens are currently visible.
+  const [stream, setStream] = useState<{ index: number; words: string[] } | null>(
+    null
+  );
+  const [shown, setShown] = useState(0);
   const [isRecording, setIsRecording] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [chatOpen, setChatOpen] = useState(true);
@@ -307,6 +315,26 @@ export default function DocumentWorkspace({
     documentContext.html,
     documentContext.text,
   ]);
+
+  // Advance the typewriter one word at a time while a reply is streaming.
+  // Clears `stream` once every token is visible so the bubble falls back to its
+  // stored full content.
+  useEffect(() => {
+    if (!stream) return;
+    if (shown >= stream.words.length) {
+      setStream(null);
+      return;
+    }
+    const timer = window.setTimeout(() => setShown((n) => n + 1), 28);
+    return () => window.clearTimeout(timer);
+  }, [stream, shown]);
+
+  // Begin streaming an assistant reply into a freshly appended message.
+  function streamAssistant(index: number, content: string) {
+    // Split on whitespace but keep the separators so spacing/newlines survive.
+    setStream({ index, words: content.split(/(\s+)/) });
+    setShown(0);
+  }
 
   async function backToDrive() {
     // Guests have no Drive — send them back to the landing page.
@@ -431,29 +459,34 @@ export default function DocumentWorkspace({
       if (actions.length > 0 && !hasEdit) {
         editorRef.current?.applyAssistantActions(actions);
       }
-      setMessages((prev) => [
-        ...prev,
+      const replyContent = diffShown
+        ? "I marked a suggested edit in the document — review the green/red changes there."
+        : hasEdit
+        ? "I couldn't find that exact text to edit. Try selecting it, then ask again."
+        : actions.length > 0
+        ? payload.message ?? "I used the editor tools for that."
+        : payload.message ?? "";
+      // The assistant reply lands right after the user message we appended.
+      setMessages([
+        ...nextMessages,
         {
           role: "assistant",
           requestType: payload.requestType,
-          content: diffShown
-            ? "I marked a suggested edit in the document — review the green/red changes there."
-            : hasEdit
-            ? "I couldn't find that exact text to edit. Try selecting it, then ask again."
-            : actions.length > 0
-            ? payload.message ?? "I used the editor tools for that."
-            : payload.message ?? "",
+          content: replyContent,
         },
       ]);
+      streamAssistant(nextMessages.length, replyContent);
       setAttachments([]);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Could not send message.";
       setStatus(message);
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: `I could not respond: ${message}` },
+      const replyContent = `I could not respond: ${message}`;
+      setMessages([
+        ...nextMessages,
+        { role: "assistant", content: replyContent },
       ]);
+      streamAssistant(nextMessages.length, replyContent);
     } finally {
       setIsSending(false);
     }
@@ -665,32 +698,43 @@ export default function DocumentWorkspace({
           </div>
 
           <div className="flex-1 space-y-4 overflow-y-auto p-4">
-            {messages.map((m, i) => (
-              <div
-                key={`${m.role}-${i}`}
-                className={
-                  m.role === "user"
-                    ? "flex justify-end"
-                    : "flex flex-col items-start gap-1"
-                }
-              >
-                {m.role === "assistant" && m.requestType && (
-                  <span className="ml-1 rounded bg-gray-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:bg-gray-800 dark:text-gray-400">
-                    {requestTypeLabels[m.requestType]}
-                  </span>
-                )}
+            {messages.map((m, i) => {
+              // While a reply is streaming, show only the revealed words for
+              // that message; everything else renders its full stored content.
+              const streaming = stream !== null && stream.index === i;
+              const text = streaming
+                ? stream.words.slice(0, shown).join("")
+                : m.content;
+              return (
                 <div
+                  key={`${m.role}-${i}`}
                   className={
                     m.role === "user"
-                      ? "max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-sm bg-gray-900 px-3.5 py-2 text-sm text-white dark:bg-gray-200 dark:text-gray-900"
-                      : "max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-bl-sm bg-white px-3.5 py-2 text-sm text-gray-800 shadow-sm ring-1 ring-gray-200 dark:bg-gray-800 dark:text-gray-100 dark:ring-gray-700"
+                      ? "flex justify-end"
+                      : "flex flex-col items-start gap-1"
                   }
                 >
-                  {m.content}
+                  {m.role === "assistant" && m.requestType && (
+                    <span className="ml-1 rounded bg-gray-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+                      {requestTypeLabels[m.requestType]}
+                    </span>
+                  )}
+                  <div
+                    className={
+                      m.role === "user"
+                        ? "max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-sm bg-gray-900 px-3.5 py-2 text-sm text-white dark:bg-gray-200 dark:text-gray-900"
+                        : "max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-bl-sm bg-white px-3.5 py-2 text-sm text-gray-800 shadow-sm ring-1 ring-gray-200 dark:bg-gray-800 dark:text-gray-100 dark:ring-gray-700"
+                    }
+                  >
+                    {text}
+                    {streaming && (
+                      <span className="ml-0.5 inline-block h-3.5 w-1.5 translate-y-0.5 animate-pulse rounded-sm bg-gray-400 dark:bg-gray-500" />
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
-            {isSending && (
+              );
+            })}
+            {isSending && !stream && (
               <div className="text-xs font-medium text-gray-400 dark:text-gray-500">Thinking…</div>
             )}
           </div>
