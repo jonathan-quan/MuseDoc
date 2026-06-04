@@ -13,6 +13,7 @@ import {
   storageUsageBytes,
   trashDocument,
   updateDocument,
+  UNTITLED,
   type StoredDocument,
 } from "../lib/documents";
 import { getTemplate } from "../lib/templates";
@@ -108,11 +109,28 @@ export default function DrivePage() {
   }
 
   async function handleDeleteForever(id: string) {
+    const name = documents.find((d) => d.id === id)?.title.trim() || UNTITLED;
+    if (
+      !window.confirm(`Permanently delete "${name}"? This can't be undone.`)
+    ) {
+      return;
+    }
     await deleteDocument(id);
     await refresh();
   }
 
   async function handleEmptyTrash() {
+    const count = documents.filter((d) => d.trashedAt !== null).length;
+    if (count === 0) return;
+    if (
+      !window.confirm(
+        `Permanently delete ${count} document${
+          count === 1 ? "" : "s"
+        } in Trash? This can't be undone.`
+      )
+    ) {
+      return;
+    }
     await emptyTrash();
     await refresh();
   }
