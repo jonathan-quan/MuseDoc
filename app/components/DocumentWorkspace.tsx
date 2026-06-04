@@ -12,6 +12,7 @@ import {
   ArrowLeft,
   Check,
   ChevronDown,
+  Feather,
   MessageSquare,
   Mic,
   Moon,
@@ -687,6 +688,7 @@ export default function DocumentWorkspace({
           >
             <ArrowLeft size={18} />
           </button>
+          <Feather size={18} className="text-gray-900 dark:text-gray-100" />
           <span className="text-lg font-semibold tracking-tight text-gray-900 dark:text-gray-100">
             MuseDoc
           </span>
@@ -824,7 +826,22 @@ export default function DocumentWorkspace({
           </div>
 
           <div className="flex-1 space-y-4 overflow-y-auto p-4">
-            {messages.map((m, i) => (
+            {messages.length <= 1 && suggestions.length > 0 && (
+              <div className="flex flex-col items-end gap-3">
+                {suggestions.map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => void sendMessage(s)}
+                    className="max-w-[85%] rounded-xl border border-gray-200 bg-white px-4 py-3 text-right text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100 dark:border-gray-700 dark:bg-gray-800/60 dark:text-gray-100 dark:hover:bg-gray-800"
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            )}
+            {(messages.length > 1 || suggestions.length === 0) &&
+              messages.map((m, i) => (
               <div
                 key={`${m.role}-${i}`}
                 className={
@@ -882,21 +899,6 @@ export default function DocumentWorkspace({
             )}
 
             {status && <div className="mb-2 text-xs text-gray-500 dark:text-gray-400">{status}</div>}
-
-            {suggestions.length > 0 && messages.length <= 1 && !isSending && (
-              <div className="mb-2 flex flex-wrap gap-1.5">
-                {suggestions.map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => void sendMessage(s)}
-                    className="rounded-full border border-gray-300 bg-white px-3 py-1 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
-                  >
-                    {s}
-                  </button>
-                ))}
-              </div>
-            )}
 
             <input
               ref={fileInputRef}
