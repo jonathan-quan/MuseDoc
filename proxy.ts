@@ -44,6 +44,7 @@ export async function proxy(request: NextRequest) {
   // app lives under /drive and /doc.
   const isPublic =
     pathname === "/" ||
+    pathname.startsWith("/try") ||
     pathname.startsWith("/auth") ||
     pathname.startsWith("/api");
 

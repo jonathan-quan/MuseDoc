@@ -2,6 +2,7 @@
 
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ChangeEvent,
@@ -34,6 +35,7 @@ import {
   type StoredDocument,
 } from "../lib/documents";
 import { useTheme } from "../lib/useTheme";
+import UserMenu from "./UserMenu";
 
 type ChatMessage = {
   role: "user" | "assistant";
@@ -275,7 +277,62 @@ function readFile(file: File): Promise<Attachment> {
   });
 }
 
-export default function DocumentWorkspace({ docId }: { docId: string }) {
+/**
+ * Suggest a few prompts the user might want to send, based on the current
+ * document. Maps the document's section headings to targeted edit prompts
+ * ("Polish the education section") and rounds out with general writing help.
+ * Returns starter prompts when the document is essentially empty.
+ */
+function buildSuggestions(html: string, text: string): string[] {
+  if (typeof window === "undefined") return [];
+  if (text.trim().length < 40) {
+    return [
+      "Draft an outline for me",
+      "Write an introduction",
+      "Help me brainstorm ideas",
+    ];
+  }
+
+  let headings: string[] = [];
+  try {
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const pick = (selector: string) =>
+      Array.from(doc.querySelectorAll(selector))
+        .map((el) => (el.textContent ?? "").trim())
+        .filter(Boolean);
+    headings = pick("h2, h3");
+    if (!headings.length) headings = pick("h1");
+  } catch {
+    headings = [];
+  }
+  headings = [...new Set(headings)].filter((h) => h.length <= 40);
+
+  const hasBullets = /<li[ >]/i.test(html);
+  const out: string[] = [];
+  if (headings[0]) out.push(`Polish the ${headings[0].toLowerCase()} section`);
+  if (headings[1]) {
+    out.push(
+      hasBullets
+        ? `Strengthen the ${headings[1].toLowerCase()} bullets`
+        : `Improve the ${headings[1].toLowerCase()} section`
+    );
+  }
+  out.push("Fix grammar and spelling");
+  out.push("Improve the overall flow and clarity");
+  return [...new Set(out)].slice(0, 4);
+}
+
+export default function DocumentWorkspace({
+  docId,
+  guest = false,
+  autoImport = false,
+}: {
+  docId?: string;
+  /** Guest mode: an in-memory scratch document that is never saved. */
+  guest?: boolean;
+  /** Open the import picker automatically once the editor mounts. */
+  autoImport?: boolean;
+}) {
   const router = useRouter();
   const { theme, toggleTheme } = useTheme();
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
@@ -298,7 +355,20 @@ export default function DocumentWorkspace({ docId }: { docId: string }) {
   // The document being edited, loaded from Supabase on mount. Held in state
   // (rather than read inline) so the editor mounts only once the HTML is
   // available — see the loading guard before the main render below.
-  const [doc, setDoc] = useState<StoredDocument | null>(null);
+  const [doc, setDoc] = useState<StoredDocument | null>(() =>
+    guest
+      ? {
+          id: "guest",
+          title: UNTITLED,
+          html: "<p></p>",
+          text: "",
+          starred: false,
+          trashedAt: null,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        }
+      : null
+  );
   const [title, setTitle] = useState(UNTITLED);
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -308,9 +378,19 @@ export default function DocumentWorkspace({ docId }: { docId: string }) {
   const audioChunksRef = useRef<Blob[]>([]);
   const [chatWidth, setChatWidth] = useState(384);
 
+  // Prompt suggestions tailored to the current document, shown as chips above
+  // the chat input until the conversation gets going.
+  const suggestions = useMemo(
+    () => buildSuggestions(documentContext.html, documentContext.text),
+    [documentContext.html, documentContext.text]
+  );
+
   // Load the document for this route from Supabase. If it doesn't exist (bad or
   // stale URL, or not the signed-in user's), send the user back to Drive home.
+  // In guest mode there is nothing to load — start a blank in-memory document.
   useEffect(() => {
+    // Guest mode initializes its blank document in useState; nothing to load.
+    if (guest || !docId) return;
     let cancelled = false;
     (async () => {
       const found = await getDocument(docId);
@@ -328,26 +408,34 @@ export default function DocumentWorkspace({ docId }: { docId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [docId, router]);
+  }, [docId, router, guest]);
+
+  // "Import Document" from the landing lands here with autoImport set; open the
+  // file picker once the editor (and its hidden input) has mounted.
+  useEffect(() => {
+    if (!autoImport || !doc) return;
+    const timer = window.setTimeout(() => editorRef.current?.openImport(), 150);
+    return () => window.clearTimeout(timer);
+  }, [autoImport, doc]);
 
   // Persist the conversation for this document so it survives leaving and
   // returning. Gated on `doc` so we never overwrite a saved chat with the
   // initial greeting before it has loaded.
   useEffect(() => {
-    if (!doc) return;
+    if (guest || !doc || !docId) return;
     void saveChat(docId, messages);
-  }, [doc, docId, messages]);
+  }, [guest, doc, docId, messages]);
 
   // Autosave. Debounced so we don't write to the database on every keystroke.
   // Persists the editor's HTML (reloaded on reopen), a plain-text snapshot
   // (used for Drive previews and search), and the current title.
   useEffect(() => {
-    if (!doc) return;
-    // The editor reports its HTML via a "transaction" event, which doesn't fire
-    // until it has mounted. Until then documentContext.html is "" — and an empty
-    // editor serializes to "<p></p>", never "" — so a "" here means "not loaded
-    // yet". Skip the write so we never overwrite a saved document with nothing.
-    if (!documentContext.html) return;
+    // Guests have nothing to save to. Otherwise wait for the editor to report
+    // its HTML via a "transaction" event, which doesn't fire until it has
+    // mounted. Until then documentContext.html is "" — and an empty editor
+    // serializes to "<p></p>", never "" — so a "" here means "not loaded yet".
+    // Skip the write so we never overwrite a saved document with nothing.
+    if (guest || !doc || !docId || !documentContext.html) return;
     const timer = window.setTimeout(() => {
       void updateDocument(docId, {
         title: title.trim() || UNTITLED,
@@ -356,13 +444,18 @@ export default function DocumentWorkspace({ docId }: { docId: string }) {
       });
     }, 600);
     return () => window.clearTimeout(timer);
-  }, [doc, docId, title, documentContext.html, documentContext.text]);
+  }, [guest, doc, docId, title, documentContext.html, documentContext.text]);
 
   async function backToDrive() {
+    // Guests have no Drive — send them back to the landing page.
+    if (guest) {
+      router.push("/");
+      return;
+    }
     // Flush any pending edits immediately so the Drive preview is current. Gated
     // on documentContext.html for the same reason as the autosave effect above:
     // don't flush an empty snapshot before the editor has reported its content.
-    if (doc && documentContext.html) {
+    if (docId && doc && documentContext.html) {
       await updateDocument(docId, {
         title: title.trim() || UNTITLED,
         html: documentContext.html,
@@ -407,8 +500,8 @@ export default function DocumentWorkspace({ docId }: { docId: string }) {
     }
   }
 
-  async function sendMessage() {
-    const text = input.trim();
+  async function sendMessage(override?: string) {
+    const text = (override ?? input).trim();
     if (!text || isSending) return;
 
     const userMessage: ChatMessage = { role: "user", content: text };
@@ -571,6 +664,18 @@ export default function DocumentWorkspace({ docId }: { docId: string }) {
 
   return (
     <div className="flex h-full flex-col">
+      {guest && (
+        <div className="flex shrink-0 flex-wrap items-center justify-center gap-x-3 gap-y-1 bg-blue-600 px-4 py-2 text-center text-sm text-white">
+          <span>You&apos;re editing as a guest — your work won&apos;t be saved.</span>
+          <button
+            type="button"
+            onClick={() => router.push("/?login=1")}
+            className="rounded-md bg-white/20 px-3 py-1 text-xs font-semibold transition-colors hover:bg-white/30"
+          >
+            Sign up to save
+          </button>
+        </div>
+      )}
       <header className="flex shrink-0 items-center justify-between border-b border-gray-200 bg-white px-6 py-3 dark:border-gray-800 dark:bg-gray-900">
         <div className="flex items-center gap-2">
           <button
@@ -626,6 +731,7 @@ export default function DocumentWorkspace({ docId }: { docId: string }) {
               {theme === "dark" ? <Moon size={12} /> : <Sun size={12} />}
             </span>
           </button>
+          {!guest && <UserMenu />}
         </div>
       </header>
 
@@ -776,6 +882,21 @@ export default function DocumentWorkspace({ docId }: { docId: string }) {
             )}
 
             {status && <div className="mb-2 text-xs text-gray-500 dark:text-gray-400">{status}</div>}
+
+            {suggestions.length > 0 && messages.length <= 1 && !isSending && (
+              <div className="mb-2 flex flex-wrap gap-1.5">
+                {suggestions.map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => void sendMessage(s)}
+                    className="rounded-full border border-gray-300 bg-white px-3 py-1 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            )}
 
             <input
               ref={fileInputRef}
