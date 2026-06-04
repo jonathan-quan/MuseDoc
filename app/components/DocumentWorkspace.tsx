@@ -644,7 +644,7 @@ export default function DocumentWorkspace({
             onDocumentChange={setDocumentContext}
           />
           {reviewing && (
-            <div className="absolute left-1/2 top-4 z-30 flex -translate-x-1/2 items-center gap-3 rounded-full border border-gray-200 bg-white px-4 py-2 shadow-lg dark:border-gray-700 dark:bg-gray-800">
+            <div className="absolute bottom-6 left-1/2 z-30 flex -translate-x-1/2 items-center gap-3 rounded-full border border-gray-200 bg-white px-4 py-2 shadow-lg dark:border-gray-700 dark:bg-gray-800">
               <span className="text-sm text-gray-600 dark:text-gray-300">
                 Review the suggested edit
               </span>
