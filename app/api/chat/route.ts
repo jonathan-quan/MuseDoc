@@ -1,3 +1,11 @@
+import { createClient } from "../../lib/supabase/server";
+import {
+  CREDIT_CAP_USD,
+  getDailySpend,
+  priceFor,
+  recordSpend,
+} from "../../lib/usage";
+
 type ChatMessage = { role: "user" | "assistant"; content: string };
 type Attachment = {
   name: string;
@@ -24,6 +32,7 @@ type ResponseOutput = {
 type OpenAIResponse = {
   output_text?: string;
   output?: ResponseOutput[];
+  usage?: { input_tokens?: number; output_tokens?: number };
   error?: { message?: string };
 };
 type AssistantAction =
@@ -249,6 +258,30 @@ export async function POST(request: Request) {
     );
   }
 
+  // The assistant requires a signed-in account.
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return Response.json(
+      { error: "Please sign in to use the assistant." },
+      { status: 401 }
+    );
+  }
+
+  // Enforce the daily free-credit cap before spending anything.
+  const spent = await getDailySpend(user.id);
+  if (spent >= CREDIT_CAP_USD) {
+    return Response.json(
+      {
+        error:
+          "You've used today's free AI credit. It resets tomorrow.",
+      },
+      { status: 429 }
+    );
+  }
+
   const body = (await request.json()) as ChatRequest;
   if (!allowedModels.has(body.model)) {
     return Response.json({ error: "Unsupported model." }, { status: 400 });
@@ -336,6 +369,9 @@ export async function POST(request: Request) {
       { status: response.status }
     );
   }
+
+  // Bill the call against the user's daily credit.
+  await recordSpend(user.id, priceFor(body.model, payload.usage));
 
   const result = parseAssistantResult(extractText(payload));
   const find = typeof result.find === "string" ? result.find : "";

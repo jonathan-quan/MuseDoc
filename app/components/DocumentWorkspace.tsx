@@ -37,6 +37,7 @@ import {
 } from "../lib/documents";
 import { useTheme } from "../lib/useTheme";
 import UserMenu from "./UserMenu";
+import AuthDialog from "./AuthDialog";
 
 type ChatMessage = {
   role: "user" | "assistant";
@@ -59,13 +60,6 @@ type RequestType =
   | "summarize"
   | "reason"
   | "tool_action";
-type PendingReview = {
-  // `find` is the exact text located in the document; `replacement` is the
-  // new text it will become. `original` is shown in the diff (same as find).
-  original: string;
-  replacement: string;
-  find: string;
-};
 
 const modelOptions: {
   label: string;
@@ -164,94 +158,6 @@ const initialMessages: ChatMessage[] = [
   },
 ];
 
-function tokenizeText(text: string) {
-  return text.match(/\s+|[^\s]+/g) ?? [];
-}
-
-function diffTokens(original: string, next: string) {
-  const a = tokenizeText(original);
-  const b = tokenizeText(next);
-  const dp = Array.from({ length: a.length + 1 }, () =>
-    Array<number>(b.length + 1).fill(0)
-  );
-
-  for (let i = a.length - 1; i >= 0; i -= 1) {
-    for (let j = b.length - 1; j >= 0; j -= 1) {
-      dp[i][j] =
-        a[i] === b[j]
-          ? dp[i + 1][j + 1] + 1
-          : Math.max(dp[i + 1][j], dp[i][j + 1]);
-    }
-  }
-
-  const parts: { type: "equal" | "delete" | "insert"; text: string }[] = [];
-  let i = 0;
-  let j = 0;
-
-  while (i < a.length && j < b.length) {
-    if (a[i] === b[j]) {
-      parts.push({ type: "equal", text: a[i] });
-      i += 1;
-      j += 1;
-    } else if (dp[i + 1][j] >= dp[i][j + 1]) {
-      parts.push({ type: "delete", text: a[i] });
-      i += 1;
-    } else {
-      parts.push({ type: "insert", text: b[j] });
-      j += 1;
-    }
-  }
-
-  while (i < a.length) {
-    parts.push({ type: "delete", text: a[i] });
-    i += 1;
-  }
-  while (j < b.length) {
-    parts.push({ type: "insert", text: b[j] });
-    j += 1;
-  }
-
-  return parts;
-}
-
-function DiffText({
-  parts,
-  side,
-}: {
-  parts: ReturnType<typeof diffTokens>;
-  side: "original" | "proposed";
-}) {
-  return (
-    <p className="whitespace-pre-wrap text-sm leading-7 text-gray-800 dark:text-gray-100">
-      {parts.map((part, index) => {
-        if (part.type === "insert" && side === "original") return null;
-        if (part.type === "delete" && side === "proposed") return null;
-        if (part.type === "delete") {
-          return (
-            <mark
-              key={`${index}-del`}
-              className="rounded bg-red-100 px-0.5 text-red-800 line-through decoration-red-500 dark:bg-red-500/25 dark:text-red-200"
-            >
-              {part.text}
-            </mark>
-          );
-        }
-        if (part.type === "insert") {
-          return (
-            <mark
-              key={`${index}-ins`}
-              className="rounded bg-green-100 px-0.5 text-green-900 dark:bg-green-500/25 dark:text-green-200"
-            >
-              {part.text}
-            </mark>
-          );
-        }
-        return <span key={`${index}-eq`}>{part.text}</span>;
-      })}
-    </p>
-  );
-}
-
 function readFile(file: File): Promise<Attachment> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -347,11 +253,14 @@ export default function DocumentWorkspace({
     currentBlockText: "",
     targetRange: null as TextRange | null,
   });
-  const [pendingReview, setPendingReview] = useState<PendingReview | null>(null);
+  const [reviewing, setReviewing] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [chatOpen, setChatOpen] = useState(true);
+  // Guests can open the editor but must sign in to use the AI; this shows the
+  // auth modal when they try.
+  const [showAuth, setShowAuth] = useState(false);
 
   // The document being edited, loaded from Supabase on mount. Held in state
   // (rather than read inline) so the editor mounts only once the HTML is
@@ -436,7 +345,9 @@ export default function DocumentWorkspace({
     // mounted. Until then documentContext.html is "" — and an empty editor
     // serializes to "<p></p>", never "" — so a "" here means "not loaded yet".
     // Skip the write so we never overwrite a saved document with nothing.
-    if (guest || !doc || !docId || !documentContext.html) return;
+    // Also pause while an inline edit diff is under review, so the temporary
+    // green/red diff markup is never persisted.
+    if (guest || reviewing || !doc || !docId || !documentContext.html) return;
     const timer = window.setTimeout(() => {
       void updateDocument(docId, {
         title: title.trim() || UNTITLED,
@@ -445,7 +356,15 @@ export default function DocumentWorkspace({
       });
     }, 600);
     return () => window.clearTimeout(timer);
-  }, [guest, doc, docId, title, documentContext.html, documentContext.text]);
+  }, [
+    guest,
+    reviewing,
+    doc,
+    docId,
+    title,
+    documentContext.html,
+    documentContext.text,
+  ]);
 
   async function backToDrive() {
     // Guests have no Drive — send them back to the landing page.
@@ -456,7 +375,7 @@ export default function DocumentWorkspace({
     // Flush any pending edits immediately so the Drive preview is current. Gated
     // on documentContext.html for the same reason as the autosave effect above:
     // don't flush an empty snapshot before the editor has reported its content.
-    if (docId && doc && documentContext.html) {
+    if (!reviewing && docId && doc && documentContext.html) {
       await updateDocument(docId, {
         title: title.trim() || UNTITLED,
         html: documentContext.html,
@@ -501,9 +420,31 @@ export default function DocumentWorkspace({
     }
   }
 
+  // Save the guest's current work so it can become a real document right after
+  // they sign in (survives the Google OAuth redirect via sessionStorage).
+  function stashGuestDraft() {
+    try {
+      sessionStorage.setItem(
+        "musedoc.pendingDraft",
+        JSON.stringify({
+          title: title.trim() || UNTITLED,
+          html: documentContext.html || doc?.html || "<p></p>",
+          text: documentContext.text || "",
+        })
+      );
+    } catch {
+      // sessionStorage unavailable — fall back to a fresh doc after sign-in.
+    }
+  }
+
   async function sendMessage(override?: string) {
     const text = (override ?? input).trim();
     if (!text || isSending) return;
+    if (guest) {
+      stashGuestDraft();
+      setShowAuth(true);
+      return;
+    }
 
     const userMessage: ChatMessage = { role: "user", content: text };
     const nextMessages = [...messages, userMessage];
@@ -538,12 +479,12 @@ export default function DocumentWorkspace({
         editFind.length > 0;
       const actions =
         payload.requestType === "tool_action" ? payload.actions ?? [] : [];
+      let diffShown = false;
       if (hasEdit && editFind) {
-        setPendingReview({
-          original: editFind,
-          replacement: payload.edit?.replace ?? "",
-          find: editFind,
-        });
+        diffShown =
+          editorRef.current?.showDiff(editFind, payload.edit?.replace ?? "") ??
+          false;
+        if (diffShown) setReviewing(true);
       }
       if (actions.length > 0 && !hasEdit) {
         editorRef.current?.applyAssistantActions(actions);
@@ -553,8 +494,10 @@ export default function DocumentWorkspace({
         {
           role: "assistant",
           requestType: payload.requestType,
-          content: hasEdit
-            ? "I prepared a suggested edit. Review it in the editor."
+          content: diffShown
+            ? "I marked a suggested edit in the document — review the green/red changes there."
+            : hasEdit
+            ? "I couldn't find that exact text to edit. Try selecting it, then ask again."
             : actions.length > 0
             ? payload.message ?? "I used the editor tools for that."
             : payload.message ?? "",
@@ -575,28 +518,21 @@ export default function DocumentWorkspace({
   }
 
   function acceptReview() {
-    if (!pendingReview) return;
-    const applied = editorRef.current?.replaceText(
-      pendingReview.find,
-      pendingReview.replacement
-    );
-    if (applied === false) {
-      setStatus(
-        "Couldn't locate the exact text to edit — it may have changed. Try selecting the text, then ask again."
-      );
-    }
-    setPendingReview(null);
+    editorRef.current?.acceptDiff();
+    setReviewing(false);
   }
 
   function rejectReview() {
-    setPendingReview(null);
+    editorRef.current?.rejectDiff();
+    setReviewing(false);
   }
 
-  const reviewDiff = pendingReview
-    ? diffTokens(pendingReview.original, pendingReview.replacement)
-    : [];
-
   async function toggleRecording() {
+    if (guest) {
+      stashGuestDraft();
+      setShowAuth(true);
+      return;
+    }
     if (isRecording) {
       mediaRecorderRef.current?.stop();
       setIsRecording(false);
@@ -665,18 +601,6 @@ export default function DocumentWorkspace({
 
   return (
     <div className="flex h-full flex-col">
-      {guest && (
-        <div className="flex shrink-0 flex-wrap items-center justify-center gap-x-3 gap-y-1 bg-blue-600 px-4 py-2 text-center text-sm text-white">
-          <span>You&apos;re editing as a guest — your work won&apos;t be saved.</span>
-          <button
-            type="button"
-            onClick={() => router.push("/?login=1")}
-            className="rounded-md bg-white/20 px-3 py-1 text-xs font-semibold transition-colors hover:bg-white/30"
-          >
-            Sign up to save
-          </button>
-        </div>
-      )}
       <header className="flex shrink-0 items-center justify-between border-b border-gray-200 bg-white px-6 py-3 dark:border-gray-800 dark:bg-gray-900">
         <div className="flex items-center gap-2">
           <button
@@ -744,52 +668,25 @@ export default function DocumentWorkspace({
             initialContent={doc.html}
             onDocumentChange={setDocumentContext}
           />
-          {pendingReview && (
-            <div className="absolute inset-0 z-30 flex flex-col bg-white dark:bg-gray-900">
-              <div className="flex shrink-0 items-center justify-between gap-4 border-b border-gray-200 px-5 py-3 dark:border-gray-800">
-                <div>
-                  <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                    Review suggested edit
-                  </h2>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
-                    Compare the current text with the assistant&apos;s version.
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={rejectReview}
-                    className="h-9 rounded-md border border-gray-300 bg-white px-3 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
-                  >
-                    Reject
-                  </button>
-                  <button
-                    type="button"
-                    onClick={acceptReview}
-                    className="h-9 rounded-md bg-gray-900 px-3 text-sm font-medium text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white"
-                  >
-                    Accept
-                  </button>
-                </div>
-              </div>
-              <div className="grid min-h-0 flex-1 grid-cols-1 divide-y divide-gray-200 overflow-hidden lg:grid-cols-2 lg:divide-x lg:divide-y-0 dark:divide-gray-800">
-                <section className="flex min-h-0 flex-col">
-                  <div className="shrink-0 border-b border-gray-200 bg-red-50 px-4 py-2 text-xs font-semibold uppercase text-red-700 dark:border-gray-800 dark:bg-red-950 dark:text-red-300">
-                    Original
-                  </div>
-                  <div className="min-h-0 flex-1 overflow-auto p-5">
-                    <DiffText parts={reviewDiff} side="original" />
-                  </div>
-                </section>
-                <section className="flex min-h-0 flex-col">
-                  <div className="shrink-0 border-b border-gray-200 bg-green-50 px-4 py-2 text-xs font-semibold uppercase text-green-700 dark:border-gray-800 dark:bg-green-950 dark:text-green-300">
-                    Proposed
-                  </div>
-                  <div className="min-h-0 flex-1 overflow-auto p-5">
-                    <DiffText parts={reviewDiff} side="proposed" />
-                  </div>
-                </section>
-              </div>
+          {reviewing && (
+            <div className="absolute left-1/2 top-4 z-30 flex -translate-x-1/2 items-center gap-3 rounded-full border border-gray-200 bg-white px-4 py-2 shadow-lg dark:border-gray-700 dark:bg-gray-800">
+              <span className="text-sm text-gray-600 dark:text-gray-300">
+                Review the suggested edit
+              </span>
+              <button
+                type="button"
+                onClick={rejectReview}
+                className="h-8 rounded-md border border-gray-300 bg-white px-3 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+              >
+                Reject
+              </button>
+              <button
+                type="button"
+                onClick={acceptReview}
+                className="h-8 rounded-md bg-gray-900 px-3 text-sm font-medium text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white"
+              >
+                Accept
+              </button>
             </div>
           )}
         </section>
@@ -856,7 +753,7 @@ export default function DocumentWorkspace({
             )}
           </div>
 
-          <div className="shrink-0 border-t border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-950">
+          <div className="shrink-0 bg-gray-50 p-3 dark:bg-gray-950">
             {attachments.length > 0 && (
               <div className="mb-2 flex flex-wrap gap-1.5">
                 {attachments.map((file) => (
@@ -894,7 +791,7 @@ export default function DocumentWorkspace({
               className="hidden"
             />
 
-            {suggestions.length > 0 && messages.length <= 1 && !isSending && (
+            {suggestions.length > 0 && !input.trim() && !isSending && (
               <div className="mb-2 flex flex-col items-end gap-2">
                 {suggestions.map((s) => (
                   <button
@@ -971,6 +868,10 @@ export default function DocumentWorkspace({
           </div>
         </aside>
       </main>
+
+      {showAuth && (
+        <AuthDialog initialMode="signup" onClose={() => setShowAuth(false)} />
+      )}
     </div>
   );
 }
