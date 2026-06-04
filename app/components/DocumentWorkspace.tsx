@@ -316,7 +316,7 @@ export default function DocumentWorkspace({ docId }: { docId: string }) {
       const found = await getDocument(docId);
       if (cancelled) return;
       if (!found) {
-        router.replace("/");
+        router.replace("/drive");
         return;
       }
       const savedChat = await loadChat(docId);
@@ -369,7 +369,7 @@ export default function DocumentWorkspace({ docId }: { docId: string }) {
         text: documentContext.text,
       });
     }
-    router.push("/");
+    router.push("/drive");
   }
 
   function startResize(e: ReactMouseEvent) {

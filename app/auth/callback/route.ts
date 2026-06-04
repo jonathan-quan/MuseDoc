@@ -10,7 +10,7 @@ import { createClient } from "../../lib/supabase/server";
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
-  const next = searchParams.get("next") ?? "/";
+  const next = searchParams.get("next") ?? "/drive";
 
   if (code) {
     const supabase = await createClient();
@@ -20,6 +20,6 @@ export async function GET(request: Request) {
     }
   }
 
-  // No code, or the exchange failed — back to login with an error flag.
-  return NextResponse.redirect(`${origin}/login?error=auth`);
+  // No code, or the exchange failed — back to the landing with the login modal.
+  return NextResponse.redirect(`${origin}/?login=1&error=auth`);
 }

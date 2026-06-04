@@ -451,7 +451,7 @@ export default function Drive({
             </p>
           </div>
           {/* Native form POST hits the sign-out route handler, which clears the
-              Supabase session cookies and redirects to /login. */}
+              Supabase session cookies and redirects to the landing page. */}
           <form action="/auth/signout" method="post" className="mt-auto">
             <button
               type="submit"
