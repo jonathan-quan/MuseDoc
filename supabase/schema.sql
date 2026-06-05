@@ -81,3 +81,42 @@ create table if not exists public.ai_usage (
 );
 
 alter table public.ai_usage enable row level security;
+
+-- ── Document image storage ──────────────────────────────────────────────────
+-- Images dropped into the editor are uploaded here instead of being inlined as
+-- base64 in the document HTML (which bloats rows and slows autosave). The bucket
+-- is public-read so the stored <img src> URLs resolve for anyone a document is
+-- shared with; writes are restricted to each user's own folder (`<user_id>/…`).
+insert into storage.buckets (id, name, public)
+values ('document-images', 'document-images', true)
+on conflict (id) do update set public = true;
+
+drop policy if exists "Document images are publicly readable" on storage.objects;
+drop policy if exists "Users can upload their own document images" on storage.objects;
+drop policy if exists "Users can update their own document images" on storage.objects;
+drop policy if exists "Users can delete their own document images" on storage.objects;
+
+create policy "Document images are publicly readable"
+  on storage.objects for select
+  using (bucket_id = 'document-images');
+
+create policy "Users can upload their own document images"
+  on storage.objects for insert to authenticated
+  with check (
+    bucket_id = 'document-images'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+create policy "Users can update their own document images"
+  on storage.objects for update to authenticated
+  using (
+    bucket_id = 'document-images'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+create policy "Users can delete their own document images"
+  on storage.objects for delete to authenticated
+  using (
+    bucket_id = 'document-images'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );

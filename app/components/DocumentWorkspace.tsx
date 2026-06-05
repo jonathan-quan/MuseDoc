@@ -31,6 +31,7 @@ import {
   loadChat,
   saveChat,
   updateDocument,
+  uploadImage,
   UNTITLED,
   type StoredDocument,
 } from "../lib/documents";
@@ -679,6 +680,9 @@ export default function DocumentWorkspace({
             ref={editorRef}
             initialContent={doc.html}
             onDocumentChange={setDocumentContext}
+            // Guests aren't signed in (can't upload), and their scratchpad is
+            // never saved — let those images inline. Real docs upload to storage.
+            onUploadImage={guest ? undefined : uploadImage}
           />
           {reviewing && (
             <div className="absolute bottom-6 left-1/2 z-30 flex -translate-x-1/2 items-center gap-3 rounded-full border border-gray-200 bg-white px-4 py-2 shadow-lg dark:border-gray-700 dark:bg-gray-800">
