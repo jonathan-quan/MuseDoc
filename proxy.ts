@@ -50,7 +50,7 @@ export async function proxy(request: NextRequest) {
   const isProtected =
     pathname === "/drive" ||
     pathname.startsWith("/drive/") ||
-    pathname.startsWith("/doc");
+    pathname.startsWith("/doc/");
 
   if (!user && isProtected) {
     // Send them to the landing page with the login modal open.

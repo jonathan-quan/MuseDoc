@@ -305,14 +305,20 @@ export default function DocumentWorkspace({
     let cancelled = false;
     setSaveState("saving");
     const timer = window.setTimeout(async () => {
-      const saved = await updateDocument(docId, {
-        title: title.trim() || UNTITLED,
-        html: documentContext.html,
-        text: documentContext.text,
-      });
-      // A newer edit (or unmount) supersedes this write — don't let its result
-      // overwrite the fresher status.
-      if (!cancelled) setSaveState(saved ? "saved" : "error");
+      try {
+        const saved = await updateDocument(docId, {
+          title: title.trim() || UNTITLED,
+          html: documentContext.html,
+          text: documentContext.text,
+        });
+        // A newer edit (or unmount) supersedes this write — don't let its
+        // result overwrite the fresher status.
+        if (!cancelled) setSaveState(saved ? "saved" : "error");
+      } catch {
+        // A thrown save must still resolve the indicator — never leave it
+        // stuck on "Saving…".
+        if (!cancelled) setSaveState("error");
+      }
     }, 600);
     return () => {
       cancelled = true;
