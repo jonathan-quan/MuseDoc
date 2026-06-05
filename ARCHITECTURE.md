@@ -184,6 +184,22 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=…  Supabase publishable/anon key (safe in the br
   the per-user daily credit cap — the proxy does not gate `/api`, the routes
   gate themselves.
 
+## Production deployment requirements
+
+- Set `OPENAI_API_KEY`, `NEXT_PUBLIC_SUPABASE_URL`,
+  `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` in the
+  production host.
+- `SUPABASE_SERVICE_ROLE_KEY` is server-only and is required for production AI
+  usage metering. `/api/chat` and `/api/transcribe` fail closed in production if
+  metering is not configured or cannot be checked.
+- Run `supabase/schema.sql` in the production Supabase project before first
+  deploy.
+- Add the production domain to Supabase Auth redirect URLs, for example
+  `https://<production-domain>/**`.
+- Chat attachments are limited to 1 MB for text files, 4 MB for images, and
+  6 MB total per request. Editor imports are limited to 10 MB, and inserted
+  images are limited to 4 MB because they are stored inline as base64 HTML.
+
 ## Commands
 
 ```
