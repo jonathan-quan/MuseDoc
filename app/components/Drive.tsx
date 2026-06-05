@@ -67,17 +67,22 @@ const navItems: { id: View; label: string; icon: typeof Home }[] = [
   { id: "trash", label: "Trash", icon: Trash2 },
 ];
 
-/** The Drive "New" button: opens a fresh blank document. */
+/** The Drive "New" button creates a blank document. */
 function NewMenu({ onCreate }: { onCreate: (templateId?: string) => void }) {
   return (
-    <button
-      type="button"
-      onClick={() => onCreate()}
-      className="mb-4 flex w-fit items-center gap-3 rounded-2xl border border-gray-200 bg-white py-3.5 pl-4 pr-6 text-sm font-medium text-gray-700 shadow-sm transition-shadow hover:shadow-md dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
-    >
-      <Plus size={20} />
-      New
-    </button>
+    <div className="mb-4">
+      <button
+        type="button"
+        onClick={() => onCreate()}
+        className="group flex w-fit items-center gap-3 rounded-2xl border border-gray-200 bg-white py-3.5 pl-4 pr-6 text-sm font-medium text-gray-700 shadow-sm transition-[background-color,border-color,box-shadow,transform] duration-200 ease-out hover:-translate-y-0.5 hover:border-gray-300 hover:bg-gray-50 hover:shadow-md active:translate-y-0 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:border-gray-600 dark:hover:bg-gray-700"
+      >
+        <Plus
+          size={20}
+          className="transition-transform duration-200 ease-out group-hover:rotate-90"
+        />
+        New
+      </button>
+    </div>
   );
 }
 
