@@ -1,5 +1,10 @@
 import { createClient } from "../../lib/supabase/server";
-import { CREDIT_CAP_USD, getDailySpend, recordSpend } from "../../lib/usage";
+import {
+  CREDIT_CAP_USD,
+  getDailySpend,
+  recordSpend,
+  usageMeteringConfigured,
+} from "../../lib/usage";
 
 type TranscriptionResponse = {
   text?: string;
@@ -23,7 +28,25 @@ export async function POST(request: Request) {
   if (!user) {
     return Response.json({ error: "Please sign in to use voice." }, { status: 401 });
   }
-  if ((await getDailySpend(user.id)) >= CREDIT_CAP_USD) {
+  if (process.env.NODE_ENV === "production" && !usageMeteringConfigured()) {
+    return Response.json(
+      {
+        error:
+          "AI usage metering is not configured. Set SUPABASE_SERVICE_ROLE_KEY.",
+      },
+      { status: 500 }
+    );
+  }
+  let spent = 0;
+  try {
+    spent = await getDailySpend(user.id);
+  } catch {
+    return Response.json(
+      { error: "Could not verify today's AI usage. Try again later." },
+      { status: 503 }
+    );
+  }
+  if (spent >= CREDIT_CAP_USD) {
     return Response.json(
       { error: "You've used today's free AI credit. It resets tomorrow." },
       { status: 429 }
@@ -56,7 +79,14 @@ export async function POST(request: Request) {
   }
 
   // Whisper is billed by audio length; charge a small flat estimate per clip.
-  await recordSpend(user.id, 0.003);
+  try {
+    await recordSpend(user.id, 0.003);
+  } catch {
+    return Response.json(
+      { error: "Could not record AI usage. Try again later." },
+      { status: 503 }
+    );
+  }
 
   return Response.json({ text: payload.text ?? "" });
 }

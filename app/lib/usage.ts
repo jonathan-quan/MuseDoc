@@ -2,17 +2,17 @@
 //
 // Each signed-in user gets a small free daily credit (CREDIT_CAP_USD). The API
 // routes check the running total before calling OpenAI and record the cost
-// afterward, using token counts returned by OpenAI × the price table below.
+// afterward, using token counts returned by OpenAI times the price table below.
 //
-// Writes use the Supabase service-role key so users can't tamper with their own
-// balance. If SUPABASE_SERVICE_ROLE_KEY is missing, metering fails OPEN (AI
-// still works, no cap) and logs a warning — set the key to enforce the cap.
+// Writes use the Supabase service-role key so users cannot tamper with their
+// own balance. Local development may run without that key; production AI routes
+// fail closed until metering is configured.
 import { createClient } from "@supabase/supabase-js";
 
 /** Free AI credit per user per day, in USD. */
 export const CREDIT_CAP_USD = 0.05;
 
-// USD per 1,000,000 tokens. EDIT these to match the real pricing of whatever
+// USD per 1,000,000 tokens. Edit these to match the real pricing of whatever
 // models these names map to. Unknown models fall back to the mini price.
 const PRICES: Record<string, { input: number; output: number }> = {
   "gpt-5.4-mini": { input: 0.15, output: 0.6 },
@@ -22,6 +22,7 @@ const PRICES: Record<string, { input: number; output: number }> = {
 };
 
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const isProduction = process.env.NODE_ENV === "production";
 const admin = serviceKey
   ? createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, serviceKey, {
       auth: { persistSession: false, autoRefreshToken: false },
@@ -30,8 +31,14 @@ const admin = serviceKey
 
 if (!admin) {
   console.warn(
-    "[usage] SUPABASE_SERVICE_ROLE_KEY not set — AI usage cap is disabled."
+    isProduction
+      ? "[usage] SUPABASE_SERVICE_ROLE_KEY not set; production AI routes will fail closed."
+      : "[usage] SUPABASE_SERVICE_ROLE_KEY not set; AI usage cap is disabled in local development."
   );
+}
+
+export function usageMeteringConfigured(): boolean {
+  return Boolean(admin);
 }
 
 function today(): string {
@@ -49,7 +56,7 @@ export function priceFor(
   return (input * p.input + output * p.output) / 1_000_000;
 }
 
-/** How much the user has spent so far today (USD). 0 if metering is disabled. */
+/** How much the user has spent so far today, in USD. */
 export async function getDailySpend(userId: string): Promise<number> {
   if (!admin) return 0;
   try {
@@ -60,13 +67,17 @@ export async function getDailySpend(userId: string): Promise<number> {
       .eq("day", today())
       .maybeSingle();
     return Number(data?.spent_usd ?? 0);
-  } catch {
+  } catch (error) {
+    if (isProduction) throw error;
     return 0;
   }
 }
 
 /** Add `amount` USD to the user's spend for today. No-op if metering is off. */
-export async function recordSpend(userId: string, amount: number): Promise<void> {
+export async function recordSpend(
+  userId: string,
+  amount: number
+): Promise<void> {
   if (!admin || amount <= 0) return;
   const day = today();
   try {
@@ -77,10 +88,12 @@ export async function recordSpend(userId: string, amount: number): Promise<void>
       .eq("day", day)
       .maybeSingle();
     const next = Number(data?.spent_usd ?? 0) + amount;
-    await admin
-      .from("ai_usage")
-      .upsert({ user_id: userId, day, spent_usd: next }, { onConflict: "user_id,day" });
-  } catch {
-    // Don't fail the request if accounting hiccups.
+    await admin.from("ai_usage").upsert(
+      { user_id: userId, day, spent_usd: next },
+      { onConflict: "user_id,day" }
+    );
+  } catch (error) {
+    if (isProduction) throw error;
+    // Do not fail local development requests if accounting hiccups.
   }
 }
