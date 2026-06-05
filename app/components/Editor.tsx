@@ -81,6 +81,15 @@ import { DiffInsert, DiffDelete } from "../extensions/DiffMarks";
 type ImageFit = "contain" | "cover" | "fill";
 type ImageAlign = "left" | "center" | "right";
 
+const MAX_IMPORT_BYTES = 10 * 1024 * 1024;
+const MAX_EMBEDDED_IMAGE_BYTES = 4 * 1024 * 1024;
+
+function formatBytes(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 const EditableImage = Image.extend({
   addAttributes() {
     return {
@@ -1696,6 +1705,12 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
+    if (file.size > MAX_IMPORT_BYTES) {
+      window.alert(
+        `${file.name} is larger than ${formatBytes(MAX_IMPORT_BYTES)}.`
+      );
+      return;
+    }
 
     const hasContent = editor.getText().trim().length > 0;
     if (
@@ -1744,6 +1759,18 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      window.alert("Choose an image file.");
+      return;
+    }
+    if (file.size > MAX_EMBEDDED_IMAGE_BYTES) {
+      window.alert(
+        `${file.name} is larger than ${formatBytes(
+          MAX_EMBEDDED_IMAGE_BYTES
+        )}.`
+      );
+      return;
+    }
 
     const reader = new FileReader();
     reader.onload = () => {

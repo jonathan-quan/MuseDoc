@@ -152,7 +152,47 @@ const initialMessages: ChatMessage[] = [
   },
 ];
 
+const MAX_TEXT_ATTACHMENT_BYTES = 1 * 1024 * 1024;
+const MAX_IMAGE_ATTACHMENT_BYTES = 4 * 1024 * 1024;
+const MAX_TOTAL_ATTACHMENT_BYTES = 6 * 1024 * 1024;
+
+function formatBytes(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function attachmentKind(file: File): Attachment["kind"] {
+  if (file.type.startsWith("image/")) return "image";
+  if (
+    file.type.startsWith("text/") ||
+    /\.(md|txt|json|csv|ts|tsx|js|jsx|css|html)$/i.test(file.name)
+  ) {
+    return "text";
+  }
+  return "unsupported";
+}
+
 function readFile(file: File): Promise<Attachment> {
+  const kind = attachmentKind(file);
+  const limit =
+    kind === "image" ? MAX_IMAGE_ATTACHMENT_BYTES : MAX_TEXT_ATTACHMENT_BYTES;
+  if (kind !== "unsupported" && file.size > limit) {
+    return Promise.reject(
+      new Error(`${file.name} is larger than ${formatBytes(limit)}.`)
+    );
+  }
+  if (kind === "unsupported") {
+    return Promise.resolve({
+      id: `${file.name}-${file.size}-${file.lastModified}`,
+      name: file.name,
+      type: file.type || "application/octet-stream",
+      size: file.size,
+      content: "",
+      kind,
+    });
+  }
+
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(new Error(`Could not read ${file.name}`));
@@ -164,16 +204,11 @@ function readFile(file: File): Promise<Attachment> {
         type: file.type || "application/octet-stream",
         size: file.size,
         content: result,
-        kind: file.type.startsWith("image/")
-          ? "image"
-          : file.type.startsWith("text/") ||
-            /\.(md|txt|json|csv|ts|tsx|js|jsx|css|html)$/i.test(file.name)
-          ? "text"
-          : "unsupported",
+        kind,
       });
     };
 
-    if (file.type.startsWith("image/")) reader.readAsDataURL(file);
+    if (kind === "image") reader.readAsDataURL(file);
     else reader.readAsText(file);
   });
 }
@@ -303,8 +338,8 @@ export default function DocumentWorkspace({
     // green/red diff markup is never persisted.
     if (guest || reviewing || !doc || !docId || !documentContext.html) return;
     let cancelled = false;
-    setSaveState("saving");
     const timer = window.setTimeout(async () => {
+      if (!cancelled) setSaveState("saving");
       const saved = await updateDocument(docId, {
         title: title.trim() || UNTITLED,
         html: documentContext.html,
@@ -333,11 +368,10 @@ export default function DocumentWorkspace({
   // stored full content.
   useEffect(() => {
     if (!stream) return;
-    if (shown >= stream.words.length) {
-      setStream(null);
-      return;
-    }
-    const timer = window.setTimeout(() => setShown((n) => n + 1), 28);
+    const timer = window.setTimeout(() => {
+      if (shown >= stream.words.length) setStream(null);
+      else setShown((n) => n + 1);
+    }, shown >= stream.words.length ? 0 : 28);
     return () => window.clearTimeout(timer);
   }, [stream, shown]);
 
@@ -396,6 +430,15 @@ export default function DocumentWorkspace({
 
     try {
       const next = await Promise.all(files.map(readFile));
+      const currentSize = attachments.reduce((sum, file) => sum + file.size, 0);
+      const nextSize = next.reduce((sum, file) => sum + file.size, 0);
+      if (currentSize + nextSize > MAX_TOTAL_ATTACHMENT_BYTES) {
+        throw new Error(
+          `Attachments can total up to ${formatBytes(
+            MAX_TOTAL_ATTACHMENT_BYTES
+          )}.`
+        );
+      }
       setAttachments((prev) => [...prev, ...next]);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Could not read file.");
