@@ -3,6 +3,7 @@
 import { useEditor, EditorContent } from "@tiptap/react";
 import { mergeAttributes, ResizableNodeView } from "@tiptap/core";
 import { NodeSelection } from "@tiptap/pm/state";
+import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import StarterKit from "@tiptap/starter-kit";
 import TextAlign from "@tiptap/extension-text-align";
 import {
@@ -705,10 +706,25 @@ export type EditorHandle = {
    *  document (deletions red/struck, insertions green). Returns false if the
    *  text can't be located. Resolve it with acceptDiff()/rejectDiff(). */
   showDiff: (find: string, replace: string) => boolean;
+  /** Preview a whole-document revision inline: pair each top-level paragraph/
+   *  heading with the corresponding revised line and show a per-block word diff
+   *  (green/red). Returns false for documents with structure it can't safely
+   *  rebuild (tables, lists, images) or when the block/line counts don't line
+   *  up — callers fall back to replaceDocument(). Resolve with acceptDiff()/
+   *  rejectDiff(). */
+  showDocumentDiff: (replace: string) => boolean;
+  /** Replace the entire document with `text` (split into paragraphs/headings).
+   *  Used as the whole-document fallback when an inline diff isn't possible. */
+  replaceDocument: (text: string) => boolean;
   /** Keep the inserted text, drop the deleted text, clear the diff marks. */
   acceptDiff: () => void;
   /** Restore the original text, clear the diff marks. */
   rejectDiff: () => void;
+  /** Capture the current document HTML so a just-applied action can be
+   *  reverted if the user rejects it. */
+  snapshot: () => string | null;
+  /** Restore a previously captured snapshot, discarding any changes since. */
+  restore: (html: string) => void;
 };
 
 export type AssistantEditorAction =
@@ -1273,6 +1289,114 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
         );
         return true;
       },
+      showDocumentDiff(replace: string) {
+        if (!editor) return false;
+
+        // The revised document arrives as newline-separated lines. We align
+        // these to the editor's blocks by LINE, not by block, because a single
+        // paragraph may hold several visual lines (hard breaks) — e.g. an email
+        // signature. Blank lines are dropped on both sides so the alignment is
+        // unaffected by whether the model separates paragraphs with one newline
+        // or two. Each block contributes as many (non-blank) lines as it holds;
+        // lines are handed out to blocks in order.
+        const newLines = replace
+          .replace(/\r/g, "")
+          .split("\n")
+          .map((l) => l.trim())
+          .filter(Boolean);
+        if (!newLines.length) return false;
+
+        // Collect top-level paragraph/heading blocks. Bail on anything we can't
+        // safely rebuild as plain lines — lists, tables, images, blockquotes,
+        // code blocks — so a whole-document diff never destroys structure.
+        type Block = { from: number; to: number; lines: string[] };
+        const blocks: Block[] = [];
+        let unsupported = false;
+        editor.state.doc.forEach((node, offset) => {
+          const name = node.type.name;
+          if (name === "paragraph" || name === "heading") {
+            // Render hard breaks inside the block as "\n" so a multi-line block
+            // splits into the right number of lines.
+            const text = node.textBetween(0, node.content.size, "\n", "\n");
+            const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+            if (lines.length) {
+              blocks.push({
+                from: offset + 1,
+                to: offset + node.nodeSize - 1,
+                lines,
+              });
+            }
+          } else {
+            unsupported = true;
+          }
+        });
+        const totalOldLines = blocks.reduce((sum, b) => sum + b.lines.length, 0);
+        if (unsupported || !blocks.length || totalOldLines !== newLines.length)
+          return false;
+
+        const { schema } = editor.state;
+        const insMark = schema.marks.diffInsert;
+        const delMark = schema.marks.diffDelete;
+        const hardBreak = schema.nodes.hardBreak;
+
+        // Build inline nodes (text + hard breaks) for a multi-line block,
+        // marking deletions red and insertions green at the word level.
+        const buildInline = (oldText: string, newText: string) => {
+          const nodes: ProseMirrorNode[] = [];
+          for (const seg of diffSegments(oldText, newText)) {
+            if (!seg.text.length) continue;
+            const marks =
+              seg.type === "delete"
+                ? [delMark.create()]
+                : seg.type === "insert"
+                ? [insMark.create()]
+                : undefined;
+            const pieces = seg.text.split("\n");
+            pieces.forEach((piece, idx) => {
+              if (idx > 0 && hardBreak) nodes.push(hardBreak.create());
+              if (piece.length) nodes.push(schema.text(piece, marks));
+            });
+          }
+          return nodes;
+        };
+
+        // Hand new lines out to each block by its original line count, then
+        // replace from the last block to the first so positions stay valid.
+        let cursor = newLines.length;
+        let tr = editor.state.tr;
+        for (let i = blocks.length - 1; i >= 0; i -= 1) {
+          const block = blocks[i];
+          const start = cursor - block.lines.length;
+          const blockNewLines = newLines.slice(start, cursor);
+          cursor = start;
+          const oldText = block.lines.join("\n");
+          const newText = blockNewLines.join("\n");
+          if (newText === oldText) continue; // unchanged: keep original content
+          const nodes = buildInline(oldText, newText);
+          if (nodes.length) tr = tr.replaceWith(block.from, block.to, nodes);
+        }
+        if (!tr.docChanged) return false;
+        editor.view.dispatch(tr.scrollIntoView());
+        return true;
+      },
+      replaceDocument(text: string) {
+        if (!editor) return false;
+        // Each non-blank line becomes its own paragraph, so a revision the model
+        // returns with single-newline separators still reads as clean
+        // paragraphs rather than one block of hard-broken lines.
+        const paragraphs = text
+          .replace(/\r/g, "")
+          .split("\n")
+          .map((line) => line.trim())
+          .filter(Boolean)
+          .map((line) => ({
+            type: "paragraph" as const,
+            content: [{ type: "text" as const, text: line }],
+          }));
+        if (!paragraphs.length) return false;
+        editor.chain().focus().setContent(paragraphs).run();
+        return true;
+      },
       acceptDiff() {
         if (!editor) return;
         const { schema } = editor.state;
@@ -1327,6 +1451,13 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
               : tr.removeMark(op.from, op.to, delMark);
           });
         editor.view.dispatch(tr);
+      },
+      snapshot() {
+        return editor ? editor.getHTML() : null;
+      },
+      restore(html: string) {
+        if (!editor) return;
+        editor.chain().focus().setContent(html || "<p></p>").run();
       },
     }),
     [editor]
