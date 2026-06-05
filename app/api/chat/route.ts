@@ -55,6 +55,9 @@ type AssistantResult = {
   // new text (empty string deletes it).
   find?: string | null;
   replace?: string | null;
+  // "document" ⇒ a whole-document edit where `replace` holds the full revised
+  // text; "selection" (default) ⇒ a targeted find-and-replace.
+  scope?: string | null;
   actions?: unknown[];
 };
 
@@ -103,8 +106,11 @@ const assistantSystemPrompt = [
   "Verbs like generate, write, draft, compose, create, produce, and continue mean the user wants new content placed in their document: classify these as tool_action and return an insert_text action whose text is the full generated content. Do not just put the generated content in message.",
   "For tool_action requests, do not ask clarifying questions. Use reasonable defaults and return at least one action.",
   "For edit, find MUST be copied verbatim from the current document text (or exactly equal to the selected text when a selection is provided): identical characters, capitalization, and punctuation. Keep find as short as possible while still uniquely locating the text to change, and keep it within a single line or paragraph.",
-  "For edit, change ONLY what the user asked and preserve everything else. Put the updated text in replace. To remove text, set replace to the surrounding text without the removed part, or to an empty string to delete the whole find. NEVER put the entire document in find or replace unless the user explicitly asks to rewrite the whole document.",
-  "Use selected editor text as the main target when it is provided.",
+  "For edit, change ONLY what the user asked and preserve everything else. Put the updated text in replace.",
+  "There are two kinds of edit. A targeted edit changes one passage: set scope to \"selection\", set find to the exact passage, and set replace to its new text (empty string to delete it). Keep find as short as possible while uniquely locating the text, within a single line or paragraph, and never put the whole document in find.",
+  "A document-wide edit changes the whole document rather than one passage — for example fixing grammar and spelling throughout, improving overall flow or clarity, changing the tone of the entire document, rewriting it, or proofreading everything, especially when no text is selected. For these, set scope to \"document\", set find to null, and set replace to the FULL revised document text: every paragraph in order, separated by newlines, with your changes applied. Preserve the document's structure and meaning and change only what the request asks.",
+  "When unsure whether an edit is targeted or document-wide, prefer document-wide if no text is selected and the request reads as applying to the entire document.",
+  "Use selected editor text as the main target when it is provided, and treat such edits as scope \"selection\".",
   "Use the full document as broader context to locate the exact text to change.",
   "Supported editor actions are: insert_table with rows, highlight_target with optional color, highlight_matches with terms and optional color, format_target with bold/italic marks, set_heading with level 1-3, and insert_text with text.",
   "Use insert_table for requests like creating a comparison table, schedule, matrix, rubric, pros/cons table, or turning content into a table.",
@@ -115,7 +121,7 @@ const assistantSystemPrompt = [
   "Use set_heading for requests like make this a heading or title.",
   "Use insert_text to place generated prose or any new text into the document, such as an email, paragraph, continuation, or new section. Set position to 'end' to append or 'cursor' to insert where the user is working.",
   "For summaries and reasoning, stay grounded in the document and separate direct evidence from inference.",
-  "Return JSON only with this shape: {\"requestType\":\"q_and_a|edit|summarize|reason|tool_action\",\"message\":\"short user-facing response\",\"find\":\"exact text to change or null\",\"replace\":\"new text or null\",\"actions\":[editor actions]}.",
+  "Return JSON only with this shape: {\"requestType\":\"q_and_a|edit|summarize|reason|tool_action\",\"message\":\"short user-facing response\",\"find\":\"exact text to change or null\",\"replace\":\"new text or null\",\"scope\":\"selection or document\",\"actions\":[editor actions]}.",
   "For edit, do not wrap find or replace in markdown or quotes.",
   "For q_and_a, summarize, and reason, keep find and replace null, and actions empty.",
   "For tool_action, keep find and replace null.",
@@ -383,7 +389,16 @@ export async function POST(request: Request) {
     : result.actions?.length
     ? "tool_action"
     : inferRequestType(lastUserMessage.content);
-  const shouldReviewEdit = requestType === "edit" && find.trim().length > 0;
+  // A document-wide edit carries the full revised text in `replace`. Trust the
+  // model's scope, but also treat an edit with no usable `find` and no
+  // selection as document-wide (a targeted edit is meaningless without a find).
+  const noSelection = !body.document?.selectionText?.trim();
+  const isDocEdit =
+    requestType === "edit" &&
+    replace.trim().length > 0 &&
+    (result.scope === "document" || (!find.trim() && noSelection));
+  const shouldReviewEdit =
+    requestType === "edit" && !isDocEdit && find.trim().length > 0;
   const normalizedActions = normalizeAssistantActions(result.actions);
   const fallbackActions =
     requestType === "tool_action" && !normalizedActions.length
@@ -398,6 +413,8 @@ export async function POST(request: Request) {
   const usedFallbackActions = fallbackActions.length > 0;
   const fallbackMessage = shouldReviewEdit
     ? "I prepared a suggested edit for review."
+    : isDocEdit
+    ? "I revised the whole document for review."
     : actions.length
     ? "I used the editor tools for that."
     : extractText(payload);
@@ -409,6 +426,7 @@ export async function POST(request: Request) {
     requestType,
     message,
     edit: shouldReviewEdit ? { find, replace } : undefined,
+    documentEdit: isDocEdit ? { replace } : undefined,
     actions,
   });
 }
