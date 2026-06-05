@@ -4,6 +4,7 @@ import {
   getDailySpend,
   priceFor,
   recordSpend,
+  usageMeteringConfigured,
 } from "../../lib/usage";
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
@@ -275,9 +276,26 @@ export async function POST(request: Request) {
       { status: 401 }
     );
   }
+  if (process.env.NODE_ENV === "production" && !usageMeteringConfigured()) {
+    return Response.json(
+      {
+        error:
+          "AI usage metering is not configured. Set SUPABASE_SERVICE_ROLE_KEY.",
+      },
+      { status: 500 }
+    );
+  }
 
   // Enforce the daily free-credit cap before spending anything.
-  const spent = await getDailySpend(user.id);
+  let spent = 0;
+  try {
+    spent = await getDailySpend(user.id);
+  } catch {
+    return Response.json(
+      { error: "Could not verify today's AI usage. Try again later." },
+      { status: 503 }
+    );
+  }
   if (spent >= CREDIT_CAP_USD) {
     return Response.json(
       {
@@ -377,7 +395,14 @@ export async function POST(request: Request) {
   }
 
   // Bill the call against the user's daily credit.
-  await recordSpend(user.id, priceFor(body.model, payload.usage));
+  try {
+    await recordSpend(user.id, priceFor(body.model, payload.usage));
+  } catch {
+    return Response.json(
+      { error: "Could not record AI usage. Try again later." },
+      { status: 503 }
+    );
+  }
 
   const result = parseAssistantResult(extractText(payload));
   const find = typeof result.find === "string" ? result.find : "";
