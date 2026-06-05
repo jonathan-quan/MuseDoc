@@ -142,6 +142,33 @@ export async function storageUsageBytes(): Promise<number> {
   );
 }
 
+/** Storage bucket for editor images (see supabase/schema.sql). Public-read. */
+const IMAGE_BUCKET = "document-images";
+
+/**
+ * Upload an image to Supabase Storage and return its public URL, so the editor
+ * can reference it by URL instead of inlining a base64 data-URI into the
+ * document HTML (which bloats rows and slows autosave). Files live under the
+ * user's own folder, which RLS restricts writes to. Returns null on failure
+ * (or when signed out) so the caller can fall back to inlining.
+ */
+export async function uploadImage(file: File): Promise<string | null> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const ext = file.name.split(".").pop()?.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const path = `${user.id}/${crypto.randomUUID()}${ext ? `.${ext}` : ""}`;
+  const { error } = await supabase.storage.from(IMAGE_BUCKET).upload(path, file, {
+    cacheControl: "31536000",
+    contentType: file.type || undefined,
+  });
+  if (error) return null;
+
+  return supabase.storage.from(IMAGE_BUCKET).getPublicUrl(path).data.publicUrl || null;
+}
+
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;

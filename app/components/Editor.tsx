@@ -730,6 +730,10 @@ type EditorProps = {
     currentBlockText: string;
     targetRange: { from: number; to: number } | null;
   }) => void;
+  /** Upload an image and return its URL. When provided, picked images are
+   *  uploaded (keeping the document HTML small) instead of inlined as base64.
+   *  Returns null to signal the caller should fall back to inlining. */
+  onUploadImage?: (file: File) => Promise<string | null>;
 };
 
 type InlineContent = { type: "text"; text: string } | { type: "hardBreak" };
@@ -951,6 +955,7 @@ function tableContent(rows: string[][]) {
 const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
   initialContent,
   onDocumentChange,
+  onUploadImage,
 }, ref) {
   const [showOutline, setShowOutline] = useState(true);
   const [showFind, setShowFind] = useState(false);
@@ -966,6 +971,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
   } | null>(null);
   const [listening, setListening] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [, setTick] = useState(0); // force re-render on editor changes
 
   const recognitionRef = useRef<unknown>(null);
@@ -1739,18 +1745,34 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
     }
   }
 
-  function addImageFromFile(e: ChangeEvent<HTMLInputElement>) {
+  async function addImageFromFile(e: ChangeEvent<HTMLInputElement>) {
     if (!editor) return;
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
 
+    const insert = (src: string) =>
+      editor.chain().focus().setImage({ src, alt: file.name }).run();
+
+    // Signed-in: upload to storage and reference the URL, so the document HTML
+    // stays small. Guests (no uploader) or any upload failure fall back to an
+    // inline data-URI — fine for an unsaved scratchpad.
+    if (onUploadImage) {
+      setUploadingImage(true);
+      try {
+        const url = await onUploadImage(file);
+        if (url) {
+          insert(url);
+          return;
+        }
+      } finally {
+        setUploadingImage(false);
+      }
+    }
+
     const reader = new FileReader();
     reader.onload = () => {
-      const src = reader.result;
-      if (typeof src === "string") {
-        editor.chain().focus().setImage({ src, alt: file.name }).run();
-      }
+      if (typeof reader.result === "string") insert(reader.result);
     };
     reader.readAsDataURL(file);
   }
@@ -2232,7 +2254,12 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
               onChange={addImageFromFile}
               className="hidden"
             />
-            <CmdBtn title="Insert image" label="Image" onClick={openImagePicker}>
+            <CmdBtn
+              title="Insert image"
+              label={uploadingImage ? "Uploading…" : "Image"}
+              disabled={uploadingImage}
+              onClick={openImagePicker}
+            >
               <ImageIcon size={18} />
             </CmdBtn>
           </div>
