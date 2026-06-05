@@ -25,7 +25,6 @@ import {
   formatTimestamp,
   type StoredDocument,
 } from "../lib/documents";
-import { templates } from "../lib/templates";
 import UserMenu from "./UserMenu";
 
 type View = "home" | "recent" | "starred" | "trash";
@@ -68,49 +67,17 @@ const navItems: { id: View; label: string; icon: typeof Home }[] = [
   { id: "trash", label: "Trash", icon: Trash2 },
 ];
 
-/** The Drive "New" button: a blank document, or one from a template. */
+/** The Drive "New" button: opens a fresh blank document. */
 function NewMenu({ onCreate }: { onCreate: (templateId?: string) => void }) {
-  const [open, setOpen] = useState(false);
-
   return (
-    <div className="relative mb-4">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-fit items-center gap-3 rounded-2xl border border-gray-200 bg-white py-3.5 pl-4 pr-6 text-sm font-medium text-gray-700 shadow-sm transition-shadow hover:shadow-md dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
-      >
-        <Plus size={20} />
-        New
-      </button>
-      {open && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 top-full z-50 mt-1 w-60 overflow-hidden rounded-lg border border-gray-200 bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-800">
-            {templates.map((template) => (
-              <button
-                key={template.id}
-                type="button"
-                onClick={() => {
-                  setOpen(false);
-                  onCreate(template.id === "blank" ? undefined : template.id);
-                }}
-                className="flex w-full items-start gap-3 px-3 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700"
-              >
-                <FileText size={16} className="mt-0.5 shrink-0 text-blue-600" />
-                <span className="min-w-0">
-                  <span className="block text-sm font-medium text-gray-800 dark:text-gray-100">
-                    {template.label}
-                  </span>
-                  <span className="block truncate text-xs text-gray-500 dark:text-gray-400">
-                    {template.description}
-                  </span>
-                </span>
-              </button>
-            ))}
-          </div>
-        </>
-      )}
-    </div>
+    <button
+      type="button"
+      onClick={() => onCreate()}
+      className="mb-4 flex w-fit items-center gap-3 rounded-2xl border border-gray-200 bg-white py-3.5 pl-4 pr-6 text-sm font-medium text-gray-700 shadow-sm transition-shadow hover:shadow-md dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
+    >
+      <Plus size={20} />
+      New
+    </button>
   );
 }
 
