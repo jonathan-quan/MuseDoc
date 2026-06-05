@@ -254,6 +254,10 @@ export default function DocumentWorkspace({
     targetRange: null as TextRange | null,
   });
   const [reviewing, setReviewing] = useState(false);
+  // HTML captured just before applying a non-diff action, so rejecting it can
+  // restore the document. Null while a diff-style edit (green/red marks) is the
+  // thing under review — those revert via the editor's diff handling instead.
+  const reviewSnapshotRef = useRef<string | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
@@ -468,6 +472,7 @@ export default function DocumentWorkspace({
         requestType?: RequestType;
         message?: string;
         edit?: { find?: string; replace?: string };
+        documentEdit?: { replace?: string };
         actions?: AssistantEditorAction[];
         error?: string;
       };
@@ -477,17 +482,46 @@ export default function DocumentWorkspace({
         payload.requestType === "edit" &&
         typeof editFind === "string" &&
         editFind.length > 0;
+      const docReplace = payload.documentEdit?.replace;
+      const hasDocEdit =
+        payload.requestType === "edit" &&
+        typeof docReplace === "string" &&
+        docReplace.trim().length > 0;
       const actions =
         payload.requestType === "tool_action" ? payload.actions ?? [] : [];
       let diffShown = false;
-      if (hasEdit && editFind) {
+      let docReplaced = false;
+      if (hasDocEdit && docReplace) {
+        // Whole-document edit: show an inline green/red diff across every
+        // paragraph when possible, otherwise apply the revision wholesale and
+        // review it via a snapshot restore.
+        diffShown = editorRef.current?.showDocumentDiff(docReplace) ?? false;
+        if (diffShown) {
+          reviewSnapshotRef.current = null;
+          setReviewing(true);
+        } else {
+          reviewSnapshotRef.current = editorRef.current?.snapshot() ?? null;
+          docReplaced = editorRef.current?.replaceDocument(docReplace) ?? false;
+          if (docReplaced) setReviewing(true);
+          else reviewSnapshotRef.current = null;
+        }
+      } else if (hasEdit && editFind) {
         diffShown =
           editorRef.current?.showDiff(editFind, payload.edit?.replace ?? "") ??
           false;
-        if (diffShown) setReviewing(true);
+        if (diffShown) {
+          reviewSnapshotRef.current = null;
+          setReviewing(true);
+        }
       }
-      if (actions.length > 0 && !hasEdit) {
+      let actionsApplied = false;
+      if (actions.length > 0 && !hasEdit && !hasDocEdit) {
+        // Snapshot the document first so the action can be reverted on reject,
+        // then apply it and let the user accept or deny like an inline edit.
+        reviewSnapshotRef.current = editorRef.current?.snapshot() ?? null;
         editorRef.current?.applyAssistantActions(actions);
+        actionsApplied = true;
+        setReviewing(true);
       }
       setMessages((prev) => [
         ...prev,
@@ -496,10 +530,16 @@ export default function DocumentWorkspace({
           requestType: payload.requestType,
           content: diffShown
             ? "I marked a suggested edit in the document — review the green/red changes there."
+            : docReplaced
+            ? payload.message ??
+              "I revised the whole document — accept or reject the changes."
+            : hasDocEdit
+            ? "I couldn't apply that document-wide edit. Try again, or select the section to change."
             : hasEdit
             ? "I couldn't find that exact text to edit. Try selecting it, then ask again."
-            : actions.length > 0
-            ? payload.message ?? "I used the editor tools for that."
+            : actionsApplied
+            ? payload.message ??
+              "I applied that to the document — accept or reject it to keep going."
             : payload.message ?? "",
         },
       ]);
@@ -518,12 +558,23 @@ export default function DocumentWorkspace({
   }
 
   function acceptReview() {
-    editorRef.current?.acceptDiff();
+    // Snapshot present ⇒ an applied action: keeping it just means dropping the
+    // snapshot. Otherwise it's an inline diff: bake in the green/red changes.
+    if (reviewSnapshotRef.current !== null) {
+      reviewSnapshotRef.current = null;
+    } else {
+      editorRef.current?.acceptDiff();
+    }
     setReviewing(false);
   }
 
   function rejectReview() {
-    editorRef.current?.rejectDiff();
+    if (reviewSnapshotRef.current !== null) {
+      editorRef.current?.restore(reviewSnapshotRef.current);
+      reviewSnapshotRef.current = null;
+    } else {
+      editorRef.current?.rejectDiff();
+    }
     setReviewing(false);
   }
 
@@ -669,21 +720,21 @@ export default function DocumentWorkspace({
             onDocumentChange={setDocumentContext}
           />
           {reviewing && (
-            <div className="absolute left-1/2 top-4 z-30 flex -translate-x-1/2 items-center gap-3 rounded-full border border-gray-200 bg-white px-4 py-2 shadow-lg dark:border-gray-700 dark:bg-gray-800">
+            <div className="absolute left-1/2 bottom-6 z-30 flex -translate-x-1/2 items-center gap-3 rounded-full border border-gray-200 bg-white px-4 py-2 shadow-lg dark:border-gray-700 dark:bg-gray-800">
               <span className="text-sm text-gray-600 dark:text-gray-300">
                 Review the suggested edit
               </span>
               <button
                 type="button"
                 onClick={rejectReview}
-                className="h-8 rounded-md border border-gray-300 bg-white px-3 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+                className="h-8 rounded-md bg-red-600 px-3 text-sm font-medium text-white hover:bg-red-700"
               >
                 Reject
               </button>
               <button
                 type="button"
                 onClick={acceptReview}
-                className="h-8 rounded-md bg-gray-900 px-3 text-sm font-medium text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white"
+                className="h-8 rounded-md bg-green-600 px-3 text-sm font-medium text-white hover:bg-green-700"
               >
                 Accept
               </button>
