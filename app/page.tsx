@@ -4,11 +4,13 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   AlignLeft,
+  ArrowRight,
   Bold,
   Check,
   ChevronDown,
   Code2,
   Feather,
+  FileText,
   Highlighter,
   Image as ImageIcon,
   Italic,
@@ -18,9 +20,7 @@ import {
   Moon,
   MousePointer2,
   Paperclip,
-  PenLine,
   Plus,
-  Replace,
   Search,
   SendHorizontal,
   Subscript,
@@ -126,24 +126,48 @@ export default function Landing() {
           </div>
         </div>
 
-        {/* ── Feature chips ──────────────────────────────────── */}
-        <div className="mt-14 grid grid-cols-1 gap-4 sm:grid-cols-3 lg:mt-20">
-          <Feature
-            icon={<PenLine size={18} />}
-            title="Draft from a prompt"
-            desc="Tell the agent what you need and it writes straight into the page."
-          />
-          <Feature
-            icon={<Replace size={18} />}
-            title="Edit inline, green/red review"
-            desc="Every suggestion appears in the text as a tracked change you can read."
-          />
-          <Feature
-            icon={<Check size={18} />}
-            title="Keep the changes you like"
-            desc="Accept or discard each change on its own — or all of them at once."
-          />
-        </div>
+        {/* ── Feature sections ───────────────────────────────── */}
+        <section className="mt-16 lg:mt-24">
+          <h2 className="text-3xl font-semibold tracking-tight lg:text-4xl">
+            A smarter word processor
+          </h2>
+          <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-2">
+            <FeatureCard
+              tone="gray"
+              title="Everything a word processor needs"
+              desc="Headings, tables, images, lists, links, find-and-replace, and a live outline — the full editing toolkit, right in your browser."
+            >
+              <ToolbarVisual />
+            </FeatureCard>
+            <FeatureCard
+              tone="blue"
+              title="An AI agent that edits inline"
+              desc="Ask it to draft, rewrite, summarize, or reason about your document. Its changes appear in green and red — keep or discard them one at a time."
+            >
+              <DiffVisual />
+            </FeatureCard>
+          </div>
+
+          <h2 className="mt-16 text-3xl font-semibold tracking-tight lg:mt-24 lg:text-4xl">
+            Open it, edit it, export it
+          </h2>
+          <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-2">
+            <FeatureCard
+              tone="blue"
+              title="Import PDFs, Word, and more"
+              desc="Open a PDF, Word doc, Markdown, or HTML file and edit it right away — PDFs are rebuilt into clean, editable text."
+            >
+              <PdfVisual />
+            </FeatureCard>
+            <FeatureCard
+              tone="gray"
+              title="Export to any format"
+              desc="Download your work as PDF, Word, Markdown, HTML, or plain text — ready to share anywhere."
+            >
+              <FormatsVisual />
+            </FeatureCard>
+          </div>
+        </section>
       </main>
 
       {authMode && (
@@ -153,25 +177,150 @@ export default function Landing() {
   );
 }
 
-/** A minimal feature chip: icon, title, one-line description. */
-function Feature({
-  icon,
+/** A large feature card: centered title + description with a UI visual that
+ *  peeks up from the clipped bottom edge. Alternates a neutral and blue tone. */
+function FeatureCard({
+  tone,
   title,
   desc,
+  children,
 }: {
-  icon: React.ReactNode;
+  tone: "gray" | "blue";
   title: string;
   desc: string;
+  children: React.ReactNode;
 }) {
+  const blue = tone === "blue";
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
-      <div className="flex items-center gap-2 text-gray-900 dark:text-gray-100">
-        <span className="flex size-8 items-center justify-center rounded-lg bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200">
-          {icon}
-        </span>
-        <span className="text-sm font-semibold">{title}</span>
+    <div
+      className={`group relative flex h-[420px] cursor-pointer flex-col items-center overflow-hidden rounded-2xl px-6 pt-10 ring-1 ring-transparent transition-all duration-300 hover:-translate-y-1.5 hover:shadow-2xl active:translate-y-0 active:scale-[0.99] hover:ring-black/5 dark:hover:ring-white/10 ${
+        blue
+          ? "bg-blue-50 dark:bg-blue-950/40"
+          : "bg-gray-100 dark:bg-gray-900"
+      }`}
+    >
+      <h3
+        className={`text-center text-2xl font-semibold tracking-tight ${
+          blue
+            ? "text-blue-900 dark:text-blue-100"
+            : "text-gray-900 dark:text-gray-100"
+        }`}
+      >
+        {title}
+      </h3>
+      <p
+        className={`mx-auto mt-3 max-w-md text-center text-[15px] leading-relaxed ${
+          blue
+            ? "text-blue-900/70 dark:text-blue-200/70"
+            : "text-gray-500 dark:text-gray-400"
+        }`}
+      >
+        {desc}
+      </p>
+      <div className="mt-9 w-full transition-transform duration-300 ease-out group-hover:scale-[1.03]">
+        {children}
       </div>
-      <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">{desc}</p>
+    </div>
+  );
+}
+
+/** Editor toolbar + a few formatted lines — the word-processor surface. */
+function ToolbarVisual() {
+  return (
+    <div className="mx-auto w-fit max-w-full overflow-hidden rounded-t-xl border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-800">
+      <MockToolbar />
+      <div className="px-5 py-4">
+        <div className="md-write h-3 w-1/2 rounded bg-gray-800 dark:bg-gray-200" />
+        <div className="mt-3 space-y-2">
+          {[96, 88, 92, 80, 84].map((w, i) => (
+            <div
+              key={i}
+              className="md-write h-1.5 rounded bg-gray-200 dark:bg-gray-700"
+              style={{ width: `${w}%`, animationDelay: `${(i + 1) * 0.18}s` }}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** A green/red inline edit with the per-change Keep/Discard control. */
+function DiffVisual() {
+  return (
+    <div className="mx-auto w-full max-w-md rounded-t-xl border border-gray-200 bg-white px-5 py-5 shadow-xl dark:border-gray-700 dark:bg-gray-800">
+      <p className="text-[13px] leading-[1.9] text-gray-700 dark:text-gray-300">
+        When the harbor bell began its low ringing, Mara{" "}
+        <del className={DEL_CLS}>was not</del>
+        <ins className={INS_CLS}>had</ins> stopped making threats and{" "}
+        <ins className={INS_CLS}>started keeping them</ins>.
+      </p>
+      <div className="mt-4 flex w-fit items-center gap-1 rounded-lg border border-gray-200 bg-white p-1 text-xs shadow-md dark:border-gray-700 dark:bg-gray-800">
+        <span className="md-press relative flex items-center gap-1 overflow-hidden rounded-md bg-green-600 px-2 py-1 font-medium text-white">
+          <Check size={12} /> Keep
+          <span className="md-ripple pointer-events-none absolute inset-0 bg-white/40" />
+        </span>
+        <span className="flex items-center gap-1 rounded-md bg-red-600 px-2 py-1 font-medium text-white">
+          <X size={12} /> Discard
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/** The formats MuseDoc can export to. */
+function FormatsVisual() {
+  const formats = ["PDF", "Word", "Markdown", "HTML", "Text"];
+  return (
+    <div className="mx-auto flex max-w-sm flex-wrap items-center justify-center gap-2.5">
+      {formats.map((f, i) => (
+        <span
+          key={f}
+          style={{ animationDelay: `${i * 0.28}s` }}
+          className="md-lift flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
+        >
+          <FileText size={15} className="text-gray-400 dark:text-gray-500" />
+          {f}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** PDF → editable document mockup. */
+function PdfVisual() {
+  return (
+    <div className="mx-auto flex max-w-sm items-center justify-center gap-4">
+      <div className="flex h-28 w-20 flex-col rounded-lg border border-gray-200 bg-white p-2 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+        <span className="mb-1.5 w-fit rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-600 dark:bg-red-950 dark:text-red-400">
+          PDF
+        </span>
+        <div className="space-y-1">
+          {[90, 80, 86, 70, 78].map((w, i) => (
+            <div
+              key={i}
+              className="h-1 rounded bg-gray-200 dark:bg-gray-700"
+              style={{ width: `${w}%` }}
+            />
+          ))}
+        </div>
+      </div>
+      <ArrowRight
+        size={20}
+        className="md-nudge shrink-0 text-gray-400 dark:text-gray-500"
+      />
+      <div className="flex h-28 w-24 flex-col rounded-lg border border-gray-200 bg-white p-2 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+        <div className="md-write mb-1.5 h-1.5 w-2/3 rounded bg-gray-800 dark:bg-gray-200" />
+        <div className="space-y-1">
+          {[95, 88, 92, 80, 84, 72].map((w, i) => (
+            <div
+              key={i}
+              className="md-write h-1 rounded bg-gray-200 dark:bg-gray-700"
+              style={{ width: `${w}%`, animationDelay: `${(i + 1) * 0.16}s` }}
+            />
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

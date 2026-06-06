@@ -497,3 +497,82 @@ body {
 .dark .editor-content p.is-editor-empty:first-child::before {
   color: #71717a;
 }
+
+/* ── Landing feature-card micro-animations ───────────────────
+   Small looping motions that make the static feature visuals feel alive. */
+@keyframes md-write {
+  0%,
+  6% {
+    transform: scaleX(0.12);
+  }
+  46%,
+  88% {
+    transform: scaleX(1);
+  }
+  100% {
+    transform: scaleX(0.12);
+  }
+}
+@keyframes md-nudge {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(6px);
+  }
+}
+@keyframes md-lift {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  }
+  30% {
+    transform: translateY(-6px);
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.12);
+  }
+}
+@keyframes md-press {
+  0%,
+  72%,
+  100% {
+    transform: scale(1);
+  }
+  82% {
+    transform: scale(0.9);
+  }
+}
+@keyframes md-ripple {
+  0%,
+  74% {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  82% {
+    opacity: 0.5;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.7);
+  }
+}
+
+.md-write {
+  transform-origin: left center;
+  animation: md-write 4.2s ease-in-out infinite;
+}
+.md-nudge {
+  animation: md-nudge 1.6s ease-in-out infinite;
+}
+.md-lift {
+  animation: md-lift 3.6s ease-in-out infinite;
+}
+.md-press {
+  animation: md-press 2.8s ease-in-out infinite;
+}
+.md-ripple {
+  animation: md-ripple 2.8s ease-in-out infinite;
+}
