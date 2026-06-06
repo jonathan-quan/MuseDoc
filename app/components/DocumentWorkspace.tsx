@@ -777,25 +777,32 @@ export default function DocumentWorkspace({
             // Guests aren't signed in (can't upload), and their scratchpad is
             // never saved — let those images inline. Real docs upload to storage.
             onUploadImage={guest ? undefined : uploadImage}
+            // Accepting/rejecting the last change one-by-one ends the review.
+            onDiffResolved={() => setReviewing(false)}
           />
           {reviewing && (
             <div className="absolute bottom-6 left-1/2 z-30 flex -translate-x-1/2 items-center gap-3 rounded-full border border-gray-200 bg-white px-4 py-2 shadow-lg dark:border-gray-700 dark:bg-gray-800">
-              <span className="text-sm text-gray-600 dark:text-gray-300">
-                Review the suggested edit
-              </span>
+              <div className="leading-tight">
+                <div className="whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">
+                  Review the edit
+                </div>
+                <div className="whitespace-nowrap text-xs text-gray-400 dark:text-gray-500">
+                  Hover a change to keep just that part
+                </div>
+              </div>
               <button
                 type="button"
                 onClick={rejectReview}
-                className="h-8 rounded-md bg-red-600 px-3 text-sm font-medium text-white hover:bg-red-700"
+                className="h-8 shrink-0 whitespace-nowrap rounded-md bg-red-600 px-3 text-sm font-medium text-white hover:bg-red-700"
               >
-                Reject
+                Reject all
               </button>
               <button
                 type="button"
                 onClick={acceptReview}
-                className="h-8 rounded-md bg-green-600 px-3 text-sm font-medium text-white hover:bg-green-700"
+                className="h-8 shrink-0 whitespace-nowrap rounded-md bg-green-600 px-3 text-sm font-medium text-white hover:bg-green-700"
               >
-                Accept
+                Accept all
               </button>
             </div>
           )}

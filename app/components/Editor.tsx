@@ -1,9 +1,9 @@
 "use client";
 
 import { useEditor, EditorContent } from "@tiptap/react";
-import { mergeAttributes, ResizableNodeView } from "@tiptap/core";
+import { mergeAttributes, ResizableNodeView, type Editor as TiptapEditor } from "@tiptap/core";
 import { NodeSelection } from "@tiptap/pm/state";
-import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
+import type { Node as ProseMirrorNode, Mark as ProseMirrorMark, Schema } from "@tiptap/pm/model";
 import StarterKit from "@tiptap/starter-kit";
 import TextAlign from "@tiptap/extension-text-align";
 import {
@@ -35,6 +35,7 @@ import {
   type ChangeEvent,
   type RefObject,
   type UIEvent as ReactUIEvent,
+  type MouseEvent as ReactMouseEvent,
 } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -73,6 +74,7 @@ import {
   ListTree,
   ChevronUp,
   ChevronDown,
+  Check,
   X,
 } from "lucide-react";
 import { Frame } from "../extensions/Frame";
@@ -704,6 +706,71 @@ function diffSegments(original: string, next: string): DiffSegment[] {
   return parts;
 }
 
+// Build the inline nodes for a word-level diff between two strings, marking
+// deletions red and insertions green and tagging each contiguous change with a
+// `hunk` id (so it can later be kept/discarded on its own). Hard breaks in the
+// text become hardBreak nodes. `hunkStart` is the last id already used; the
+// returned `nextHunk` continues the sequence for the next block.
+function buildDiffNodes(
+  schema: Schema,
+  oldText: string,
+  newText: string,
+  hunkStart: number
+): { nodes: ProseMirrorNode[]; nextHunk: number } {
+  const insMark = schema.marks.diffInsert;
+  const delMark = schema.marks.diffDelete;
+  const hardBreak = schema.nodes.hardBreak;
+  const nodes: ProseMirrorNode[] = [];
+  let hunk = hunkStart;
+  let inChange = false;
+
+  const pushText = (
+    text: string,
+    marks: readonly ProseMirrorMark[] | undefined
+  ) => {
+    const pieces = text.split("\n");
+    pieces.forEach((piece, idx) => {
+      if (idx > 0 && hardBreak) nodes.push(hardBreak.create());
+      if (piece.length) nodes.push(schema.text(piece, marks));
+    });
+  };
+
+  for (const seg of diffSegments(oldText, newText)) {
+    if (!seg.text.length) continue;
+    if (seg.type === "equal") {
+      inChange = false;
+      pushText(seg.text, undefined);
+      continue;
+    }
+    // Start a new hunk when entering a change after equal text; a deletion and
+    // the insertion that replaces it stay in the same hunk.
+    if (!inChange) {
+      hunk += 1;
+      inChange = true;
+    }
+    const mark =
+      seg.type === "delete" ? delMark.create({ hunk }) : insMark.create({ hunk });
+    pushText(seg.text, [mark]);
+  }
+  return { nodes, nextHunk: hunk };
+}
+
+/** Whether any diff (review) marks are still present in the document. */
+function hasDiffMarks(editor: TiptapEditor): boolean {
+  const { diffInsert, diffDelete } = editor.state.schema.marks;
+  let found = false;
+  editor.state.doc.descendants((node) => {
+    if (found) return false;
+    if (
+      node.isText &&
+      node.marks.some((m) => m.type === diffInsert || m.type === diffDelete)
+    )
+      found = true;
+    return !found;
+  });
+  return found;
+}
+
 export type EditorHandle = {
   /** Locate `find` verbatim in the document and replace it in place with
    *  `replace` (empty `replace` deletes it), preserving everything else. */
@@ -759,6 +826,9 @@ type EditorProps = {
    *  uploaded (keeping the document HTML small) instead of inlined as base64.
    *  Returns null to signal the caller should fall back to inlining. */
   onUploadImage?: (file: File) => Promise<string | null>;
+  /** Called when the last pending diff is resolved via per-change accept/reject,
+   *  so the caller can close its review UI. */
+  onDiffResolved?: () => void;
 };
 
 type InlineContent = { type: "text"; text: string } | { type: "hardBreak" };
@@ -981,6 +1051,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
   initialContent,
   onDocumentChange,
   onUploadImage,
+  onDiffResolved,
 }, ref) {
   const [showOutline, setShowOutline] = useState(true);
   const [showFind, setShowFind] = useState(false);
@@ -998,8 +1069,16 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
   const [importing, setImporting] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [, setTick] = useState(0); // force re-render on editor changes
+  // Floating "keep / discard" control for the diff hunk under the cursor.
+  const [hunkUI, setHunkUI] = useState<{
+    id: number;
+    top: number;
+    left: number;
+  } | null>(null);
 
   const recognitionRef = useRef<unknown>(null);
+  const pageRef = useRef<HTMLDivElement>(null);
+  const hunkHideTimer = useRef<number | null>(null);
   const findInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
@@ -1279,19 +1358,12 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
         if (from === -1) return false;
 
         const current = editor.state.doc.textBetween(from, to, "\n");
-        const segments = diffSegments(current, replace);
-        const { schema } = editor.state;
-        const insMark = schema.marks.diffInsert;
-        const delMark = schema.marks.diffDelete;
-        const nodes = segments
-          .filter((seg) => seg.text.length > 0)
-          .map((seg) =>
-            seg.type === "equal"
-              ? schema.text(seg.text)
-              : seg.type === "delete"
-              ? schema.text(seg.text, [delMark.create()])
-              : schema.text(seg.text, [insMark.create()])
-          );
+        const { nodes } = buildDiffNodes(
+          editor.state.schema,
+          current,
+          replace,
+          0
+        );
         if (!nodes.length) return false;
         editor.view.dispatch(
           editor.state.tr.replaceWith(from, to, nodes).scrollIntoView()
@@ -1343,35 +1415,11 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
         if (unsupported || !blocks.length || totalOldLines !== newLines.length)
           return false;
 
-        const { schema } = editor.state;
-        const insMark = schema.marks.diffInsert;
-        const delMark = schema.marks.diffDelete;
-        const hardBreak = schema.nodes.hardBreak;
-
-        // Build inline nodes (text + hard breaks) for a multi-line block,
-        // marking deletions red and insertions green at the word level.
-        const buildInline = (oldText: string, newText: string) => {
-          const nodes: ProseMirrorNode[] = [];
-          for (const seg of diffSegments(oldText, newText)) {
-            if (!seg.text.length) continue;
-            const marks =
-              seg.type === "delete"
-                ? [delMark.create()]
-                : seg.type === "insert"
-                ? [insMark.create()]
-                : undefined;
-            const pieces = seg.text.split("\n");
-            pieces.forEach((piece, idx) => {
-              if (idx > 0 && hardBreak) nodes.push(hardBreak.create());
-              if (piece.length) nodes.push(schema.text(piece, marks));
-            });
-          }
-          return nodes;
-        };
-
         // Hand new lines out to each block by its original line count, then
         // replace from the last block to the first so positions stay valid.
+        // Hunk ids continue across blocks so each change is uniquely tagged.
         let cursor = newLines.length;
+        let hunk = 0;
         let tr = editor.state.tr;
         for (let i = blocks.length - 1; i >= 0; i -= 1) {
           const block = blocks[i];
@@ -1381,8 +1429,15 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
           const oldText = block.lines.join("\n");
           const newText = blockNewLines.join("\n");
           if (newText === oldText) continue; // unchanged: keep original content
-          const nodes = buildInline(oldText, newText);
-          if (nodes.length) tr = tr.replaceWith(block.from, block.to, nodes);
+          const built = buildDiffNodes(
+            editor.state.schema,
+            oldText,
+            newText,
+            hunk
+          );
+          hunk = built.nextHunk;
+          if (built.nodes.length)
+            tr = tr.replaceWith(block.from, block.to, built.nodes);
         }
         if (!tr.docChanged) return false;
         editor.view.dispatch(tr.scrollIntoView());
@@ -1519,12 +1574,96 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
 
       setImageToolbar(null);
       setImageMenu(null);
+
+      // Drop the hover control once no diffs remain (e.g. accept/reject all).
+      if (!hasDiffMarks(editor)) setHunkUI(null);
     };
     editor.on("transaction", update);
     return () => {
       editor.off("transaction", update);
     };
   }, [editor, onDocumentChange]);
+
+  // Resolve a single diff hunk: keep its insertions (accept) or its deletions
+  // (reject), leaving every other hunk pending. Mirrors acceptDiff/rejectDiff
+  // but scoped to one `hunk` id. Closes review if it was the last one.
+  const resolveHunk = (id: number, accept: boolean) => {
+    if (!editor) return;
+    const { diffInsert: insMark, diffDelete: delMark } = editor.state.schema.marks;
+    const deletions: { from: number; to: number }[] = [];
+    const unmarks: { from: number; to: number; mark: typeof insMark }[] = [];
+    editor.state.doc.descendants((node, pos) => {
+      if (!node.isText) return;
+      const ins = node.marks.find((m) => m.type === insMark);
+      const del = node.marks.find((m) => m.type === delMark);
+      const range = { from: pos, to: pos + node.nodeSize };
+      if (ins && ins.attrs.hunk === id) {
+        // Accept keeps inserted text (unmark it); reject drops it.
+        if (accept) unmarks.push({ ...range, mark: insMark });
+        else deletions.push(range);
+      } else if (del && del.attrs.hunk === id) {
+        // Accept drops deleted text; reject restores it (unmark it).
+        if (accept) deletions.push(range);
+        else unmarks.push({ ...range, mark: delMark });
+      }
+    });
+    let tr = editor.state.tr;
+    [
+      ...deletions.map((r) => ({ ...r, del: true as const, mark: insMark })),
+      ...unmarks.map((r) => ({ ...r, del: false as const })),
+    ]
+      .sort((a, b) => b.from - a.from)
+      .forEach((op) => {
+        tr = op.del
+          ? tr.delete(op.from, op.to)
+          : tr.removeMark(op.from, op.to, op.mark);
+      });
+    editor.view.dispatch(tr);
+    setHunkUI(null);
+    if (!hasDiffMarks(editor)) onDiffResolved?.();
+  };
+
+  const cancelHunkHide = () => {
+    if (hunkHideTimer.current) {
+      window.clearTimeout(hunkHideTimer.current);
+      hunkHideTimer.current = null;
+    }
+  };
+  const scheduleHunkHide = () => {
+    cancelHunkHide();
+    hunkHideTimer.current = window.setTimeout(() => setHunkUI(null), 140);
+  };
+
+  // Show the keep/discard control above whichever hunk the pointer is over.
+  const onHunkPointer = (e: ReactMouseEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement;
+    const marked = target.closest<HTMLElement>("[data-hunk]");
+    if (marked) {
+      cancelHunkHide();
+      const page = pageRef.current;
+      if (!page) return;
+      const id = Number(marked.getAttribute("data-hunk"));
+      const pageRect = page.getBoundingClientRect();
+      const spans = page.querySelectorAll<HTMLElement>(`[data-hunk="${id}"]`);
+      let top = Infinity;
+      let left = Infinity;
+      let right = -Infinity;
+      spans.forEach((s) => {
+        const r = s.getBoundingClientRect();
+        top = Math.min(top, r.top);
+        left = Math.min(left, r.left);
+        right = Math.max(right, r.right);
+      });
+      if (top === Infinity) return;
+      setHunkUI({
+        id,
+        top: top - pageRect.top,
+        left: (left + right) / 2 - pageRect.left,
+      });
+    } else if (!target.closest("[data-diff-toolbar]")) {
+      scheduleHunkHide();
+    }
+  };
 
   // ── Outline from headings ──────────────────────────────
   const headings: { level: number; text: string; pos: number }[] = [];
@@ -2976,8 +3115,37 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
           onScroll={showScrollbarBriefly}
           className="slim-scroll flex-1 overflow-y-auto bg-gray-200 dark:bg-gray-950"
         >
-          <div className="mx-auto mb-8 min-h-[1056px] w-full max-w-[816px] rounded-sm bg-white px-[64px] pb-[56px] pt-6 shadow-lg dark:bg-gray-900">
+          <div
+            ref={pageRef}
+            onMouseOver={onHunkPointer}
+            onMouseLeave={scheduleHunkHide}
+            className="relative mx-auto mb-8 min-h-[1056px] w-full max-w-[816px] rounded-sm bg-white px-[64px] pb-[56px] pt-6 shadow-lg dark:bg-gray-900"
+          >
             <EditorContent editor={editor} />
+            {hunkUI && (
+              <div
+                data-diff-toolbar
+                onMouseEnter={cancelHunkHide}
+                onMouseLeave={scheduleHunkHide}
+                style={{ top: hunkUI.top, left: hunkUI.left }}
+                className="absolute z-20 flex -translate-x-1/2 -translate-y-[calc(100%+6px)] items-center gap-1 rounded-lg border border-gray-200 bg-white p-1 shadow-md dark:border-gray-700 dark:bg-gray-800"
+              >
+                <button
+                  type="button"
+                  onClick={() => resolveHunk(hunkUI.id, true)}
+                  className="flex items-center gap-1 rounded-md bg-green-600 px-2 py-1 text-xs font-medium text-white hover:bg-green-700"
+                >
+                  <Check size={13} /> Keep
+                </button>
+                <button
+                  type="button"
+                  onClick={() => resolveHunk(hunkUI.id, false)}
+                  className="flex items-center gap-1 rounded-md bg-red-600 px-2 py-1 text-xs font-medium text-white hover:bg-red-700"
+                >
+                  <X size={13} /> Discard
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
