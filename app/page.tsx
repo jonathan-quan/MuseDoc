@@ -18,7 +18,9 @@ import {
   Moon,
   MousePointer2,
   Paperclip,
+  PenLine,
   Plus,
+  Replace,
   Search,
   SendHorizontal,
   Subscript,
@@ -86,45 +88,90 @@ export default function Landing() {
       </header>
 
       <main className="px-6 pb-20 lg:px-10">
-        {/* ── Hero copy ────────────────────────────────────── */}
-        <h1 className="mt-4 max-w-4xl text-5xl font-semibold tracking-tight lg:text-6xl">
-          Proofread essays{" "}
-          <span className="text-gray-400 dark:text-gray-500">with AI</span>
-        </h1>
-        <p className="mt-5 max-w-3xl text-xl text-gray-600 dark:text-gray-300 lg:text-2xl">
-          MuseDoc is a word processor with an AI agent that can draft, research,
-          and edit alongside you.
-        </p>
-
-        <div className="mt-8 flex flex-col gap-4 lg:flex-row lg:items-center">
-          <div className="flex items-center gap-3">
-            <Link
-              href="/try"
-              className="rounded-lg bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700"
-            >
-              Start Writing
-            </Link>
-            <Link
-              href="/try?import=1"
-              className="rounded-lg border border-gray-300 bg-white px-5 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-100 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
-            >
-              Import Document
-            </Link>
+        {/* ── Hero: copy on the left, live demo on the right ─── */}
+        <div className="mt-6 grid grid-cols-1 items-center gap-10 lg:mt-12 lg:grid-cols-[0.85fr_1.15fr] lg:gap-12">
+          {/* Copy + actions */}
+          <div className="min-w-0">
+            <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">
+              Write with an AI{" "}
+              <span className="text-gray-400 dark:text-gray-500">that edits</span>
+            </h1>
+            <p className="mt-5 max-w-xl text-lg text-gray-600 dark:text-gray-300">
+              MuseDoc is a full word processor where the agent drafts and revises
+              right in your document. Ask for changes, see them inline, and keep
+              only the ones you want.
+            </p>
+            <div className="mt-8 flex flex-wrap items-center gap-3">
+              <Link
+                href="/try"
+                className="rounded-lg bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700"
+              >
+                Start writing
+              </Link>
+              <Link
+                href="/try?import=1"
+                className="rounded-lg border border-gray-300 bg-white px-5 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-100 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
+              >
+                Import document
+              </Link>
+            </div>
+            <p className="mt-4 text-sm text-gray-400 dark:text-gray-500">
+              No setup — start writing in your browser.
+            </p>
           </div>
-          <p className="text-base text-gray-400 lg:ml-6 dark:text-gray-500">
-            Easily switch between writing and prompting, in the same interface
-          </p>
+
+          {/* Live product demo */}
+          <div className="min-w-0">
+            <HeroDemo />
+          </div>
         </div>
 
-        {/* ── Product demo ─────────────────────────────────── */}
-        <div className="mt-10">
-          <HeroDemo />
+        {/* ── Feature chips ──────────────────────────────────── */}
+        <div className="mt-14 grid grid-cols-1 gap-4 sm:grid-cols-3 lg:mt-20">
+          <Feature
+            icon={<PenLine size={18} />}
+            title="Draft from a prompt"
+            desc="Tell the agent what you need and it writes straight into the page."
+          />
+          <Feature
+            icon={<Replace size={18} />}
+            title="Edit inline, green/red review"
+            desc="Every suggestion appears in the text as a tracked change you can read."
+          />
+          <Feature
+            icon={<Check size={18} />}
+            title="Keep the changes you like"
+            desc="Accept or discard each change on its own — or all of them at once."
+          />
         </div>
       </main>
 
       {authMode && (
         <AuthDialog initialMode={authMode} onClose={() => setAuthMode(null)} />
       )}
+    </div>
+  );
+}
+
+/** A minimal feature chip: icon, title, one-line description. */
+function Feature({
+  icon,
+  title,
+  desc,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  desc: string;
+}) {
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+      <div className="flex items-center gap-2 text-gray-900 dark:text-gray-100">
+        <span className="flex size-8 items-center justify-center rounded-lg bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200">
+          {icon}
+        </span>
+        <span className="text-sm font-semibold">{title}</span>
+      </div>
+      <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">{desc}</p>
     </div>
   );
 }
@@ -232,9 +279,10 @@ const K = {
   s3DiffAt: 19900,
   s3HoverStart: 20900, // cursor heads to the change's Keep control
   s3KeepAt: 22100,
-  s3AcceptCursor: 22600, // cursor heads to Accept all
-  s3AcceptAllAt: 23800,
-  loop: 25800,
+  // Hold ~1s on the kept change before heading to Accept all.
+  s3AcceptCursor: 23100,
+  s3AcceptAllAt: 24300,
+  loop: 26300,
 };
 
 // Fallback fake-cursor positions (percentages of the demo) used only until the
@@ -273,6 +321,8 @@ function HeroDemo() {
   const sendBtnRef = useRef<HTMLSpanElement>(null);
   const acceptBtnRef = useRef<HTMLButtonElement>(null);
   const keepBtnRef = useRef<HTMLSpanElement>(null);
+  const editorColRef = useRef<HTMLDivElement>(null);
+  const hunkRef = useRef<HTMLSpanElement>(null);
   const playing = useRef(true);
   // Measured button centers (relative to the demo) so the cursor lands on them.
   const [pos, setPos] = useState<{
@@ -280,6 +330,12 @@ function HeroDemo() {
     accept: { x: number; y: number } | null;
     keep: { x: number; y: number } | null;
   }>({ send: null, accept: null, keep: null });
+  // Measured, clamped position of the per-change Keep/Discard control so it
+  // always sits fully inside the editor (the showcase change can wrap to the
+  // right edge, where an inline-anchored control would be clipped).
+  const [hunkCtrl, setHunkCtrl] = useState<{ top: number; left: number } | null>(
+    null
+  );
 
   // Only animate while the demo is on screen, to avoid burning CPU off-view.
   useEffect(() => {
@@ -316,6 +372,28 @@ function HeroDemo() {
         accept: center(acceptBtnRef.current),
         keep: center(keepBtnRef.current),
       });
+
+      // Place the Keep/Discard control just above the showcase change, clamped
+      // to stay within the editor column.
+      const col = editorColRef.current;
+      const hunkEl = hunkRef.current;
+      if (col && hunkEl) {
+        const cr = col.getBoundingClientRect();
+        const hr = hunkEl.getBoundingClientRect();
+        const W = 172;
+        const H = 34;
+        const GAP = 6;
+        const PAD = 10;
+        const left = Math.max(
+          PAD,
+          Math.min(hr.left - cr.left, cr.width - W - PAD)
+        );
+        const above = hr.top - cr.top - H - GAP;
+        const top = above < PAD ? hr.bottom - cr.top + GAP : above;
+        setHunkCtrl({ top, left });
+      } else {
+        setHunkCtrl(null);
+      }
     };
     const tick = (now: number) => {
       raf = requestAnimationFrame(tick);
@@ -451,24 +529,9 @@ function HeroDemo() {
     if (resolved) return <span key={i}>{seg.ins}</span>;
     const isShowcase = id === SHOWCASE_HUNK;
     return (
-      <span key={i} className={isShowcase ? "relative" : undefined}>
+      <span key={i} ref={isShowcase ? hunkRef : undefined}>
         <del className={DEL_CLS}>{seg.del}</del>
         <ins className={INS_CLS}>{seg.ins}</ins>
-        {isShowcase && showHunkControl && (
-          <span className="absolute bottom-full left-0 z-20 mb-1 flex items-center gap-1 whitespace-nowrap rounded-lg border border-gray-200 bg-white p-1 text-xs shadow-md dark:border-gray-700 dark:bg-gray-800">
-            <span
-              ref={keepBtnRef}
-              className={`flex items-center gap-1 rounded-md bg-green-600 px-2 py-1 font-medium text-white transition-transform ${
-                clickingKeep ? "scale-95 ring-2 ring-green-300" : ""
-              }`}
-            >
-              <Check size={12} /> Keep
-            </span>
-            <span className="flex items-center gap-1 rounded-md bg-red-600 px-2 py-1 font-medium text-white">
-              <X size={12} /> Discard
-            </span>
-          </span>
-        )}
       </span>
     );
   };
@@ -477,20 +540,25 @@ function HeroDemo() {
     <div
       ref={rootRef}
       aria-label="MuseDoc product demo"
-      className="relative grid select-none grid-cols-1 gap-px overflow-hidden rounded-2xl border border-gray-200 bg-gray-200 shadow-sm lg:grid-cols-[1.9fr_1fr] dark:border-gray-800 dark:bg-gray-800"
+      className="relative grid select-none grid-cols-1 gap-px overflow-hidden rounded-2xl border border-gray-200 bg-gray-200 shadow-sm lg:grid-cols-[1.6fr_1fr] dark:border-gray-800 dark:bg-gray-800"
     >
       {/* Editor side */}
-      <div className="relative flex min-w-0 flex-col bg-white dark:bg-gray-900">
+      <div
+        ref={editorColRef}
+        className="relative flex min-h-0 min-w-0 flex-col bg-white lg:h-[460px] dark:bg-gray-900"
+      >
         <MockToolbar />
-        <div className="h-[460px] overflow-hidden px-8 py-7">
+        <div className="min-h-[340px] flex-1 overflow-hidden px-6 py-6 lg:min-h-0">
           {t < K.genStart ? (
-            <p className="text-gray-400 dark:text-gray-500">Start writing…</p>
+            <p className="text-[13px] text-gray-400 dark:text-gray-500">
+              Start writing…
+            </p>
           ) : (
             <>
-              <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
                 {DOC_TITLE}
               </h2>
-              <div className="mt-4 text-[15px] leading-relaxed text-gray-700 dark:text-gray-300">
+              <div className="mt-3 text-[13px] leading-[1.7] text-gray-700 dark:text-gray-300">
                 {t < K.genEnd ? (
                   <p>
                     {typed(GEN_TEXT, t, K.genStart, K.genEnd)}
@@ -503,6 +571,27 @@ function HeroDemo() {
             </>
           )}
         </div>
+
+        {/* Per-change Keep/Discard control, positioned above the showcase
+            change and clamped to stay inside the editor. */}
+        {showHunkControl && hunkCtrl && (
+          <div
+            className="pointer-events-none absolute z-30 flex items-center gap-1 whitespace-nowrap rounded-lg border border-gray-200 bg-white p-1 text-xs shadow-md dark:border-gray-700 dark:bg-gray-800"
+            style={{ top: hunkCtrl.top, left: hunkCtrl.left }}
+          >
+            <span
+              ref={keepBtnRef}
+              className={`flex items-center gap-1 rounded-md bg-green-600 px-2 py-1 font-medium text-white transition-transform ${
+                clickingKeep ? "scale-95 ring-2 ring-green-300" : ""
+              }`}
+            >
+              <Check size={12} /> Keep
+            </span>
+            <span className="flex items-center gap-1 rounded-md bg-red-600 px-2 py-1 font-medium text-white">
+              <X size={12} /> Discard
+            </span>
+          </div>
+        )}
 
         {/* Review pill — always mounted (so Accept can be measured for the
             cursor), shown only while an edit is under review. */}
@@ -540,11 +629,11 @@ function HeroDemo() {
       </div>
 
       {/* AI agent side */}
-      <div className="flex flex-col bg-gray-50 dark:bg-gray-950">
+      <div className="flex min-h-0 flex-col bg-gray-50 lg:h-[460px] dark:bg-gray-950">
         <div className="shrink-0 border-b border-gray-200 px-4 py-3 text-sm font-semibold text-gray-900 dark:border-gray-800 dark:text-gray-100">
           Assistant
         </div>
-        <div className="flex flex-1 flex-col justify-end gap-3 overflow-hidden px-3 py-3">
+        <div className="flex min-h-0 flex-1 flex-col justify-end gap-3 overflow-hidden px-3 py-3">
           {messages.map((m, i) => (
             <div
               key={i}
@@ -594,7 +683,7 @@ function HeroDemo() {
             </p>
             <div className="mt-2 flex items-center gap-2 text-gray-400 dark:text-gray-500">
               <span className="flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium">
-                GPT-5.4 Mini
+                GPT-5.5
                 <ChevronDown size={13} />
               </span>
               <Paperclip size={16} className="ml-auto" />
