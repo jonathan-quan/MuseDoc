@@ -200,20 +200,98 @@ function isObject(value: unknown): value is Record<string, unknown> {
 function normalizeAssistantActions(value: unknown): AssistantAction[] {
   if (!Array.isArray(value)) return [];
 
-  return value.flatMap((rawAction) => {
+  return value.flatMap<AssistantAction>((rawAction) => {
     if (!isObject(rawAction)) return [];
 
+    let action: Record<string, unknown>;
+
     if (typeof rawAction.type === "string") {
-      return [rawAction as AssistantAction];
+      action = rawAction;
+    } else {
+      const [entry] = Object.entries(rawAction);
+      if (!entry) return [];
+
+      const [type, payload] = entry;
+      if (!isObject(payload)) return [];
+      action = { type, ...payload };
     }
 
-    const [entry] = Object.entries(rawAction);
-    if (!entry) return [];
+    if (action.type === "insert_text") {
+      return typeof action.text === "string" && action.text.trim()
+        ? [
+            {
+              type: "insert_text",
+              text: action.text,
+              position:
+                action.position === "end" || action.position === "cursor"
+                  ? action.position
+                  : undefined,
+            },
+          ]
+        : [];
+    }
 
-    const [type, payload] = entry;
-    if (!isObject(payload)) return [];
+    if (action.type === "insert_table") {
+      const rows = Array.isArray(action.rows)
+        ? action.rows
+            .filter(Array.isArray)
+            .map((row) => row.map((cell) => String(cell)))
+            .filter((row) => row.length > 0)
+        : [];
+      return rows.length
+        ? [
+            {
+              type: "insert_table",
+              rows,
+              position:
+                action.position === "end" || action.position === "cursor"
+                  ? action.position
+                  : undefined,
+            },
+          ]
+        : [];
+    }
 
-    return [{ type, ...payload } as AssistantAction];
+    if (action.type === "highlight_target") {
+      return [
+        {
+          type: "highlight_target",
+          color: typeof action.color === "string" ? action.color : undefined,
+        },
+      ];
+    }
+
+    if (action.type === "highlight_matches") {
+      const terms = Array.isArray(action.terms)
+        ? action.terms.map((term) => String(term)).filter(Boolean)
+        : [];
+      return terms.length
+        ? [
+            {
+              type: "highlight_matches",
+              terms,
+              color: typeof action.color === "string" ? action.color : undefined,
+            },
+          ]
+        : [];
+    }
+
+    if (action.type === "format_target") {
+      const marks = Array.isArray(action.marks)
+        ? action.marks.filter((mark) => mark === "bold" || mark === "italic")
+        : [];
+      return marks.length
+        ? [{ type: "format_target", marks: marks as Array<"bold" | "italic"> }]
+        : [];
+    }
+
+    if (action.type === "set_heading") {
+      return action.level === 1 || action.level === 2 || action.level === 3
+        ? [{ type: "set_heading", level: action.level }]
+        : [];
+    }
+
+    return [];
   });
 }
 
@@ -247,6 +325,68 @@ function fallbackToolActions(request: string): AssistantAction[] {
       ],
     },
   ];
+}
+
+function isGeneratedTextRequest(request: string) {
+  return /\b(write|draft|generate|create|compose|produce|come up with|give me|insert)\b/i.test(
+    request
+  );
+}
+
+async function generateInsertTextFallback({
+  apiKey,
+  model,
+  contextText,
+  request,
+  attachments,
+}: {
+  apiKey: string;
+  model: string;
+  contextText: string;
+  request: string;
+  attachments: Attachment[];
+}): Promise<{ text: string; usage?: OpenAIResponse["usage"] } | null> {
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    cache: "no-store",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model,
+      input: [
+        {
+          role: "system",
+          content:
+            "You write only the content that should be inserted into the user's document. Do not describe the action. Do not say it has been added. Do not wrap the answer in JSON or markdown fences. If the user asks for a short paragraph, return one short paragraph.",
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "input_text",
+              text: `${contextText}\n\nUser request:\n${request}${attachmentSummary(
+                attachments
+              )}`,
+            },
+          ],
+        },
+      ],
+    }),
+  });
+
+  const payload = (await response.json()) as OpenAIResponse;
+  if (!response.ok) return null;
+
+  const text = extractText(payload)
+    .trim()
+    .replace(/^```(?:\w+)?\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+
+  if (!text) return null;
+  return { text, usage: payload.usage };
 }
 
 export async function POST(request: Request) {
@@ -373,36 +513,68 @@ export async function POST(request: Request) {
   // Bill the call against the user's daily credit.
   await recordSpend(user.id, priceFor(body.model, payload.usage));
 
-  const result = parseAssistantResult(extractText(payload));
+  const primaryText = extractText(payload);
+  const result = parseAssistantResult(primaryText);
   const find = typeof result.find === "string" ? result.find : "";
   const replace = typeof result.replace === "string" ? result.replace : "";
-  const requestType: RequestType = isRequestType(result.requestType)
+  const inferredRequestType = inferRequestType(lastUserMessage.content);
+  const modelRequestType = isRequestType(result.requestType)
     ? result.requestType
-    : find.trim()
-    ? "edit"
-    : result.actions?.length
-    ? "tool_action"
-    : inferRequestType(lastUserMessage.content);
+    : undefined;
+  const requestType: RequestType =
+    inferredRequestType === "tool_action" && !find.trim()
+      ? "tool_action"
+      : modelRequestType
+      ? modelRequestType
+      : find.trim()
+      ? "edit"
+      : result.actions?.length
+      ? "tool_action"
+      : inferredRequestType;
   const shouldReviewEdit = requestType === "edit" && find.trim().length > 0;
   const normalizedActions = normalizeAssistantActions(result.actions);
-  const fallbackActions =
-    requestType === "tool_action" && !normalizedActions.length
-      ? fallbackToolActions(lastUserMessage.content)
+  let actions =
+    requestType === "tool_action" && normalizedActions.length
+      ? normalizedActions
       : [];
-  const actions =
-    requestType === "tool_action"
-      ? normalizedActions.length
-        ? normalizedActions
-        : fallbackActions
-      : [];
-  const usedFallbackActions = fallbackActions.length > 0;
+  let usedFallbackActions = false;
+  let usedGeneratedTextFallback = false;
+
+  if (requestType === "tool_action" && !actions.length) {
+    const fallbackActions = fallbackToolActions(lastUserMessage.content);
+    if (fallbackActions.length) {
+      actions = fallbackActions;
+      usedFallbackActions = true;
+    } else if (isGeneratedTextRequest(lastUserMessage.content)) {
+      const generated = await generateInsertTextFallback({
+        apiKey,
+        model: body.model,
+        contextText,
+        request: lastUserMessage.content,
+        attachments,
+      });
+
+      if (generated) {
+        if (generated.usage) {
+          await recordSpend(user.id, priceFor(body.model, generated.usage));
+        }
+        actions = [
+          { type: "insert_text", text: generated.text, position: "cursor" },
+        ];
+        usedFallbackActions = true;
+        usedGeneratedTextFallback = true;
+      }
+    }
+  }
   const fallbackMessage = shouldReviewEdit
     ? "I prepared a suggested edit for review."
     : actions.length
     ? "I used the editor tools for that."
-    : extractText(payload);
+    : primaryText;
   const message = usedFallbackActions
-    ? "I created a comparison table using a standard layout."
+    ? usedGeneratedTextFallback
+      ? "I added that to the document."
+      : "I created a comparison table using a standard layout."
     : result.message?.trim() || fallbackMessage;
 
   return Response.json({

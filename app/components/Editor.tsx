@@ -698,7 +698,7 @@ export type EditorHandle = {
   /** Locate `find` verbatim in the document and replace it in place with
    *  `replace` (empty `replace` deletes it), preserving everything else. */
   replaceText: (find: string, replace: string) => boolean;
-  applyAssistantActions: (actions: AssistantEditorAction[]) => void;
+  applyAssistantActions: (actions: AssistantEditorAction[]) => boolean;
   /** Open the file picker for importing a PDF/Word/text/HTML document. */
   openImport: () => void;
   /** Preview an edit inline: locate `find` and show a word-level diff in the
@@ -1122,10 +1122,29 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
         return true;
       },
       applyAssistantActions(actions: AssistantEditorAction[]) {
-        if (!editor) return;
+        const activeEditor = editor;
+        if (!activeEditor) return false;
+
+        let changed = false;
+
+        function insertEditorContent(
+          content:
+            | ReturnType<typeof textToEditorContent>
+            | ReturnType<typeof tableContent>,
+          position?: "cursor" | "end"
+        ) {
+          const command =
+            position === "end"
+              ? activeEditor!
+                  .chain()
+                  .focus()
+                  .insertContentAt(activeEditor!.state.doc.content.size, content)
+              : activeEditor!.chain().focus().insertContent(content);
+          changed = command.run() || changed;
+        }
 
         for (const action of actions) {
-          const { selection } = editor.state;
+          const { selection } = activeEditor.state;
           const targetRange =
             selection.empty && selection.$from.depth > 0
               ? {
@@ -1135,33 +1154,18 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
               : selection.empty
               ? null
               : { from: selection.from, to: selection.to };
-          const insertAt =
-            action.type === "insert_table" || action.type === "insert_text"
-              ? action.position === "end"
-                ? editor.state.doc.content.size
-                : selection.to
-              : selection.to;
-
           if (action.type === "insert_table" && action.rows.length) {
-            editor
-              .chain()
-              .focus()
-              .insertContentAt(insertAt, tableContent(action.rows))
-              .run();
+            insertEditorContent(tableContent(action.rows), action.position);
             continue;
           }
 
           if (action.type === "insert_text" && action.text.trim()) {
-            editor
-              .chain()
-              .focus()
-              .insertContentAt(insertAt, textToEditorContent(action.text))
-              .run();
+            insertEditorContent(textToEditorContent(action.text), action.position);
             continue;
           }
 
           if (action.type === "highlight_matches") {
-            const markType = editor.schema.marks.highlight;
+            const markType = activeEditor.schema.marks.highlight;
             if (!markType) continue;
 
             const terms = action.terms
@@ -1170,9 +1174,9 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
               .sort((a, b) => b.length - a.length);
             if (!terms.length) continue;
 
-            let tr = editor.state.tr;
-            let changed = false;
-            editor.state.doc.descendants((node, pos) => {
+            let tr = activeEditor.state.tr;
+            let marksChanged = false;
+            activeEditor.state.doc.descendants((node, pos) => {
               if (!node.isText || !node.text) return;
 
               const text = node.text;
@@ -1186,15 +1190,16 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
                     pos + index + term.length,
                     markType.create({ color: action.color ?? "#fef08a" })
                   );
-                  changed = true;
+                  marksChanged = true;
                   index = lowerText.indexOf(lowerTerm, index + lowerTerm.length);
                 }
               }
             });
 
-            if (changed) {
-              editor.view.dispatch(tr);
-              editor.commands.focus();
+            if (marksChanged) {
+              activeEditor.view.dispatch(tr);
+              activeEditor.commands.focus();
+              changed = true;
             }
             continue;
           }
@@ -1202,32 +1207,36 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
           if (!targetRange) continue;
 
           if (action.type === "highlight_target") {
-            editor
+            activeEditor
               .chain()
               .focus()
               .setTextSelection(targetRange)
               .setHighlight({ color: action.color ?? "#fef08a" })
               .run();
+            changed = true;
             continue;
           }
 
           if (action.type === "format_target") {
-            let chain = editor.chain().focus().setTextSelection(targetRange);
+            let chain = activeEditor.chain().focus().setTextSelection(targetRange);
             if (action.marks.includes("bold")) chain = chain.toggleBold();
             if (action.marks.includes("italic")) chain = chain.toggleItalic();
-            chain.run();
+            changed = chain.run() || changed;
             continue;
           }
 
           if (action.type === "set_heading") {
-            editor
-              .chain()
-              .focus()
-              .setTextSelection(targetRange)
-              .toggleHeading({ level: action.level })
-              .run();
+            changed =
+              activeEditor
+                .chain()
+                .focus()
+                .setTextSelection(targetRange)
+                .toggleHeading({ level: action.level })
+                .run() || changed;
           }
         }
+
+        return changed;
       },
       showDiff(find: string, replace: string) {
         if (!editor) return false;
