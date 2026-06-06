@@ -304,7 +304,9 @@ export default function DocumentWorkspace({
     // green/red diff markup is never persisted.
     if (guest || reviewing || !doc || !docId || !documentContext.html) return;
     let cancelled = false;
-    setSaveState("saving");
+    const savingTimer = window.setTimeout(() => {
+      if (!cancelled) setSaveState("saving");
+    }, 0);
     const timer = window.setTimeout(async () => {
       try {
         const saved = await updateDocument(docId, {
@@ -323,6 +325,7 @@ export default function DocumentWorkspace({
     }, 600);
     return () => {
       cancelled = true;
+      window.clearTimeout(savingTimer);
       window.clearTimeout(timer);
     };
   }, [
@@ -341,8 +344,8 @@ export default function DocumentWorkspace({
   useEffect(() => {
     if (!stream) return;
     if (shown >= stream.words.length) {
-      setStream(null);
-      return;
+      const timer = window.setTimeout(() => setStream(null), 0);
+      return () => window.clearTimeout(timer);
     }
     const timer = window.setTimeout(() => setShown((n) => n + 1), 28);
     return () => window.clearTimeout(timer);
@@ -469,6 +472,7 @@ export default function DocumentWorkspace({
       const actions =
         payload.requestType === "tool_action" ? payload.actions ?? [] : [];
       let diffShown = false;
+      let actionsApplied = false;
       if (hasEdit && editFind) {
         diffShown =
           editorRef.current?.showDiff(editFind, payload.edit?.replace ?? "") ??
@@ -476,12 +480,18 @@ export default function DocumentWorkspace({
         if (diffShown) setReviewing(true);
       }
       if (actions.length > 0 && !hasEdit) {
-        editorRef.current?.applyAssistantActions(actions);
+        actionsApplied =
+          editorRef.current?.applyAssistantActions(actions) ?? false;
+        if (!actionsApplied) {
+          setStatus("I could not insert that into the document. Try again.");
+        }
       }
       const replyContent = diffShown
         ? "I marked a suggested edit in the document — review the green/red changes there."
         : hasEdit
         ? "I couldn't find that exact text to edit. Try selecting it, then ask again."
+        : actions.length > 0 && !actionsApplied
+        ? "I could not insert that into the document. Try again."
         : actions.length > 0
         ? payload.message ?? "I used the editor tools for that."
         : payload.message ?? "";
