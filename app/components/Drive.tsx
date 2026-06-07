@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Clock,
-  Feather,
   FileText,
   Grid2x2,
   Home,
@@ -26,6 +25,7 @@ import {
   type StoredDocument,
 } from "../lib/documents";
 import UserMenu from "./UserMenu";
+import Logo from "./Logo";
 
 type View = "home" | "recent" | "starred" | "trash";
 
@@ -351,7 +351,7 @@ export default function Drive({
       {/* Top bar */}
       <header className="flex shrink-0 items-center gap-4 px-4 py-3">
         <div className="flex w-56 items-center gap-2">
-          <Feather size={22} className="text-gray-900 dark:text-gray-100" />
+          <Logo className="h-6 w-6" />
           <span className="text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">
             MuseDoc
           </span>
