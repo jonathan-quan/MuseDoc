@@ -1,8 +1,9 @@
 "use client";
 
 import { useEditor, EditorContent } from "@tiptap/react";
-import { mergeAttributes, ResizableNodeView } from "@tiptap/core";
+import { mergeAttributes, ResizableNodeView, type Editor as TiptapEditor } from "@tiptap/core";
 import { NodeSelection } from "@tiptap/pm/state";
+import type { Node as ProseMirrorNode, Mark as ProseMirrorMark, Schema } from "@tiptap/pm/model";
 import StarterKit from "@tiptap/starter-kit";
 import TextAlign from "@tiptap/extension-text-align";
 import {
@@ -34,6 +35,7 @@ import {
   type ChangeEvent,
   type RefObject,
   type UIEvent as ReactUIEvent,
+  type MouseEvent as ReactMouseEvent,
 } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -72,6 +74,7 @@ import {
   ListTree,
   ChevronUp,
   ChevronDown,
+  Check,
   X,
 } from "lucide-react";
 import { Frame } from "../extensions/Frame";
@@ -80,6 +83,15 @@ import { DiffInsert, DiffDelete } from "../extensions/DiffMarks";
 
 type ImageFit = "contain" | "cover" | "fill";
 type ImageAlign = "left" | "center" | "right";
+
+const MAX_IMPORT_BYTES = 10 * 1024 * 1024;
+const MAX_EMBEDDED_IMAGE_BYTES = 4 * 1024 * 1024;
+
+function formatBytes(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 const EditableImage = Image.extend({
   addAttributes() {
@@ -694,6 +706,71 @@ function diffSegments(original: string, next: string): DiffSegment[] {
   return parts;
 }
 
+// Build the inline nodes for a word-level diff between two strings, marking
+// deletions red and insertions green and tagging each contiguous change with a
+// `hunk` id (so it can later be kept/discarded on its own). Hard breaks in the
+// text become hardBreak nodes. `hunkStart` is the last id already used; the
+// returned `nextHunk` continues the sequence for the next block.
+function buildDiffNodes(
+  schema: Schema,
+  oldText: string,
+  newText: string,
+  hunkStart: number
+): { nodes: ProseMirrorNode[]; nextHunk: number } {
+  const insMark = schema.marks.diffInsert;
+  const delMark = schema.marks.diffDelete;
+  const hardBreak = schema.nodes.hardBreak;
+  const nodes: ProseMirrorNode[] = [];
+  let hunk = hunkStart;
+  let inChange = false;
+
+  const pushText = (
+    text: string,
+    marks: readonly ProseMirrorMark[] | undefined
+  ) => {
+    const pieces = text.split("\n");
+    pieces.forEach((piece, idx) => {
+      if (idx > 0 && hardBreak) nodes.push(hardBreak.create());
+      if (piece.length) nodes.push(schema.text(piece, marks));
+    });
+  };
+
+  for (const seg of diffSegments(oldText, newText)) {
+    if (!seg.text.length) continue;
+    if (seg.type === "equal") {
+      inChange = false;
+      pushText(seg.text, undefined);
+      continue;
+    }
+    // Start a new hunk when entering a change after equal text; a deletion and
+    // the insertion that replaces it stay in the same hunk.
+    if (!inChange) {
+      hunk += 1;
+      inChange = true;
+    }
+    const mark =
+      seg.type === "delete" ? delMark.create({ hunk }) : insMark.create({ hunk });
+    pushText(seg.text, [mark]);
+  }
+  return { nodes, nextHunk: hunk };
+}
+
+/** Whether any diff (review) marks are still present in the document. */
+function hasDiffMarks(editor: TiptapEditor): boolean {
+  const { diffInsert, diffDelete } = editor.state.schema.marks;
+  let found = false;
+  editor.state.doc.descendants((node) => {
+    if (found) return false;
+    if (
+      node.isText &&
+      node.marks.some((m) => m.type === diffInsert || m.type === diffDelete)
+    )
+      found = true;
+    return !found;
+  });
+  return found;
+}
+
 export type EditorHandle = {
   /** Locate `find` verbatim in the document and replace it in place with
    *  `replace` (empty `replace` deletes it), preserving everything else. */
@@ -705,10 +782,25 @@ export type EditorHandle = {
    *  document (deletions red/struck, insertions green). Returns false if the
    *  text can't be located. Resolve it with acceptDiff()/rejectDiff(). */
   showDiff: (find: string, replace: string) => boolean;
+  /** Preview a whole-document revision inline: pair each top-level paragraph/
+   *  heading with the corresponding revised line and show a per-block word diff
+   *  (green/red). Returns false for documents with structure it can't safely
+   *  rebuild (tables, lists, images) or when the block/line counts don't line
+   *  up — callers fall back to replaceDocument(). Resolve with acceptDiff()/
+   *  rejectDiff(). */
+  showDocumentDiff: (replace: string) => boolean;
+  /** Replace the entire document with `text` (split into paragraphs/headings).
+   *  Used as the whole-document fallback when an inline diff isn't possible. */
+  replaceDocument: (text: string) => boolean;
   /** Keep the inserted text, drop the deleted text, clear the diff marks. */
   acceptDiff: () => void;
   /** Restore the original text, clear the diff marks. */
   rejectDiff: () => void;
+  /** Capture the current document HTML so a just-applied action can be
+   *  reverted if the user rejects it. */
+  snapshot: () => string | null;
+  /** Restore a previously captured snapshot, discarding any changes since. */
+  restore: (html: string) => void;
 };
 
 export type AssistantEditorAction =
@@ -734,6 +826,9 @@ type EditorProps = {
    *  uploaded (keeping the document HTML small) instead of inlined as base64.
    *  Returns null to signal the caller should fall back to inlining. */
   onUploadImage?: (file: File) => Promise<string | null>;
+  /** Called when the last pending diff is resolved via per-change accept/reject,
+   *  so the caller can close its review UI. */
+  onDiffResolved?: () => void;
 };
 
 type InlineContent = { type: "text"; text: string } | { type: "hardBreak" };
@@ -956,6 +1051,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
   initialContent,
   onDocumentChange,
   onUploadImage,
+  onDiffResolved,
 }, ref) {
   const [showOutline, setShowOutline] = useState(true);
   const [showFind, setShowFind] = useState(false);
@@ -973,8 +1069,16 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
   const [importing, setImporting] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [, setTick] = useState(0); // force re-render on editor changes
+  // Floating "keep / discard" control for the diff hunk under the cursor.
+  const [hunkUI, setHunkUI] = useState<{
+    id: number;
+    top: number;
+    left: number;
+  } | null>(null);
 
   const recognitionRef = useRef<unknown>(null);
+  const pageRef = useRef<HTMLDivElement>(null);
+  const hunkHideTimer = useRef<number | null>(null);
   const findInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
@@ -1263,23 +1367,107 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
         if (from === -1) return false;
 
         const current = editor.state.doc.textBetween(from, to, "\n");
-        const segments = diffSegments(current, replace);
-        const { schema } = editor.state;
-        const insMark = schema.marks.diffInsert;
-        const delMark = schema.marks.diffDelete;
-        const nodes = segments
-          .filter((seg) => seg.text.length > 0)
-          .map((seg) =>
-            seg.type === "equal"
-              ? schema.text(seg.text)
-              : seg.type === "delete"
-              ? schema.text(seg.text, [delMark.create()])
-              : schema.text(seg.text, [insMark.create()])
-          );
+        const { nodes } = buildDiffNodes(
+          editor.state.schema,
+          current,
+          replace,
+          0
+        );
         if (!nodes.length) return false;
         editor.view.dispatch(
           editor.state.tr.replaceWith(from, to, nodes).scrollIntoView()
         );
+        return true;
+      },
+      showDocumentDiff(replace: string) {
+        if (!editor) return false;
+
+        // The revised document arrives as newline-separated lines. We align
+        // these to the editor's blocks by LINE, not by block, because a single
+        // paragraph may hold several visual lines (hard breaks) — e.g. an email
+        // signature. Blank lines are dropped on both sides so the alignment is
+        // unaffected by whether the model separates paragraphs with one newline
+        // or two. Each block contributes as many (non-blank) lines as it holds;
+        // lines are handed out to blocks in order.
+        const newLines = replace
+          .replace(/\r/g, "")
+          .split("\n")
+          .map((l) => l.trim())
+          .filter(Boolean);
+        if (!newLines.length) return false;
+
+        // Collect top-level paragraph/heading blocks. Bail on anything we can't
+        // safely rebuild as plain lines — lists, tables, images, blockquotes,
+        // code blocks — so a whole-document diff never destroys structure.
+        type Block = { from: number; to: number; lines: string[] };
+        const blocks: Block[] = [];
+        let unsupported = false;
+        editor.state.doc.forEach((node, offset) => {
+          const name = node.type.name;
+          if (name === "paragraph" || name === "heading") {
+            // Render hard breaks inside the block as "\n" so a multi-line block
+            // splits into the right number of lines.
+            const text = node.textBetween(0, node.content.size, "\n", "\n");
+            const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+            if (lines.length) {
+              blocks.push({
+                from: offset + 1,
+                to: offset + node.nodeSize - 1,
+                lines,
+              });
+            }
+          } else {
+            unsupported = true;
+          }
+        });
+        const totalOldLines = blocks.reduce((sum, b) => sum + b.lines.length, 0);
+        if (unsupported || !blocks.length || totalOldLines !== newLines.length)
+          return false;
+
+        // Hand new lines out to each block by its original line count, then
+        // replace from the last block to the first so positions stay valid.
+        // Hunk ids continue across blocks so each change is uniquely tagged.
+        let cursor = newLines.length;
+        let hunk = 0;
+        let tr = editor.state.tr;
+        for (let i = blocks.length - 1; i >= 0; i -= 1) {
+          const block = blocks[i];
+          const start = cursor - block.lines.length;
+          const blockNewLines = newLines.slice(start, cursor);
+          cursor = start;
+          const oldText = block.lines.join("\n");
+          const newText = blockNewLines.join("\n");
+          if (newText === oldText) continue; // unchanged: keep original content
+          const built = buildDiffNodes(
+            editor.state.schema,
+            oldText,
+            newText,
+            hunk
+          );
+          hunk = built.nextHunk;
+          if (built.nodes.length)
+            tr = tr.replaceWith(block.from, block.to, built.nodes);
+        }
+        if (!tr.docChanged) return false;
+        editor.view.dispatch(tr.scrollIntoView());
+        return true;
+      },
+      replaceDocument(text: string) {
+        if (!editor) return false;
+        // Each non-blank line becomes its own paragraph, so a revision the model
+        // returns with single-newline separators still reads as clean
+        // paragraphs rather than one block of hard-broken lines.
+        const paragraphs = text
+          .replace(/\r/g, "")
+          .split("\n")
+          .map((line) => line.trim())
+          .filter(Boolean)
+          .map((line) => ({
+            type: "paragraph" as const,
+            content: [{ type: "text" as const, text: line }],
+          }));
+        if (!paragraphs.length) return false;
+        editor.chain().focus().setContent(paragraphs).run();
         return true;
       },
       acceptDiff() {
@@ -1337,6 +1525,13 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
           });
         editor.view.dispatch(tr);
       },
+      snapshot() {
+        return editor ? editor.getHTML() : null;
+      },
+      restore(html: string) {
+        if (!editor) return;
+        editor.chain().focus().setContent(html || "<p></p>").run();
+      },
     }),
     [editor]
   );
@@ -1388,12 +1583,96 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
 
       setImageToolbar(null);
       setImageMenu(null);
+
+      // Drop the hover control once no diffs remain (e.g. accept/reject all).
+      if (!hasDiffMarks(editor)) setHunkUI(null);
     };
     editor.on("transaction", update);
     return () => {
       editor.off("transaction", update);
     };
   }, [editor, onDocumentChange]);
+
+  // Resolve a single diff hunk: keep its insertions (accept) or its deletions
+  // (reject), leaving every other hunk pending. Mirrors acceptDiff/rejectDiff
+  // but scoped to one `hunk` id. Closes review if it was the last one.
+  const resolveHunk = (id: number, accept: boolean) => {
+    if (!editor) return;
+    const { diffInsert: insMark, diffDelete: delMark } = editor.state.schema.marks;
+    const deletions: { from: number; to: number }[] = [];
+    const unmarks: { from: number; to: number; mark: typeof insMark }[] = [];
+    editor.state.doc.descendants((node, pos) => {
+      if (!node.isText) return;
+      const ins = node.marks.find((m) => m.type === insMark);
+      const del = node.marks.find((m) => m.type === delMark);
+      const range = { from: pos, to: pos + node.nodeSize };
+      if (ins && ins.attrs.hunk === id) {
+        // Accept keeps inserted text (unmark it); reject drops it.
+        if (accept) unmarks.push({ ...range, mark: insMark });
+        else deletions.push(range);
+      } else if (del && del.attrs.hunk === id) {
+        // Accept drops deleted text; reject restores it (unmark it).
+        if (accept) deletions.push(range);
+        else unmarks.push({ ...range, mark: delMark });
+      }
+    });
+    let tr = editor.state.tr;
+    [
+      ...deletions.map((r) => ({ ...r, del: true as const, mark: insMark })),
+      ...unmarks.map((r) => ({ ...r, del: false as const })),
+    ]
+      .sort((a, b) => b.from - a.from)
+      .forEach((op) => {
+        tr = op.del
+          ? tr.delete(op.from, op.to)
+          : tr.removeMark(op.from, op.to, op.mark);
+      });
+    editor.view.dispatch(tr);
+    setHunkUI(null);
+    if (!hasDiffMarks(editor)) onDiffResolved?.();
+  };
+
+  const cancelHunkHide = () => {
+    if (hunkHideTimer.current) {
+      window.clearTimeout(hunkHideTimer.current);
+      hunkHideTimer.current = null;
+    }
+  };
+  const scheduleHunkHide = () => {
+    cancelHunkHide();
+    hunkHideTimer.current = window.setTimeout(() => setHunkUI(null), 140);
+  };
+
+  // Show the keep/discard control above whichever hunk the pointer is over.
+  const onHunkPointer = (e: ReactMouseEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement;
+    const marked = target.closest<HTMLElement>("[data-hunk]");
+    if (marked) {
+      cancelHunkHide();
+      const page = pageRef.current;
+      if (!page) return;
+      const id = Number(marked.getAttribute("data-hunk"));
+      const pageRect = page.getBoundingClientRect();
+      const spans = page.querySelectorAll<HTMLElement>(`[data-hunk="${id}"]`);
+      let top = Infinity;
+      let left = Infinity;
+      let right = -Infinity;
+      spans.forEach((s) => {
+        const r = s.getBoundingClientRect();
+        top = Math.min(top, r.top);
+        left = Math.min(left, r.left);
+        right = Math.max(right, r.right);
+      });
+      if (top === Infinity) return;
+      setHunkUI({
+        id,
+        top: top - pageRect.top,
+        left: (left + right) / 2 - pageRect.left,
+      });
+    } else if (!target.closest("[data-diff-toolbar]")) {
+      scheduleHunkHide();
+    }
+  };
 
   // ── Outline from headings ──────────────────────────────
   const headings: { level: number; text: string; pos: number }[] = [];
@@ -1711,6 +1990,12 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
+    if (file.size > MAX_IMPORT_BYTES) {
+      window.alert(
+        `${file.name} is larger than ${formatBytes(MAX_IMPORT_BYTES)}.`
+      );
+      return;
+    }
 
     const hasContent = editor.getText().trim().length > 0;
     if (
@@ -1759,6 +2044,18 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      window.alert("Choose an image file.");
+      return;
+    }
+    if (file.size > MAX_EMBEDDED_IMAGE_BYTES) {
+      window.alert(
+        `${file.name} is larger than ${formatBytes(
+          MAX_EMBEDDED_IMAGE_BYTES
+        )}.`
+      );
+      return;
+    }
 
     const insert = (src: string) =>
       editor.chain().focus().setImage({ src, alt: file.name }).run();
@@ -2827,8 +3124,37 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
           onScroll={showScrollbarBriefly}
           className="slim-scroll flex-1 overflow-y-auto bg-gray-200 dark:bg-gray-950"
         >
-          <div className="mx-auto mb-8 min-h-[1056px] w-full max-w-[816px] rounded-sm bg-white px-[64px] pb-[56px] pt-6 shadow-lg dark:bg-gray-900">
+          <div
+            ref={pageRef}
+            onMouseOver={onHunkPointer}
+            onMouseLeave={scheduleHunkHide}
+            className="relative mx-auto mb-8 min-h-[1056px] w-full max-w-[816px] rounded-sm bg-white px-[64px] pb-[56px] pt-6 shadow-lg dark:bg-gray-900"
+          >
             <EditorContent editor={editor} />
+            {hunkUI && (
+              <div
+                data-diff-toolbar
+                onMouseEnter={cancelHunkHide}
+                onMouseLeave={scheduleHunkHide}
+                style={{ top: hunkUI.top, left: hunkUI.left }}
+                className="absolute z-20 flex -translate-x-1/2 -translate-y-[calc(100%+6px)] items-center gap-1 rounded-lg border border-gray-200 bg-white p-1 shadow-md dark:border-gray-700 dark:bg-gray-800"
+              >
+                <button
+                  type="button"
+                  onClick={() => resolveHunk(hunkUI.id, true)}
+                  className="flex items-center gap-1 rounded-md bg-green-600 px-2 py-1 text-xs font-medium text-white hover:bg-green-700"
+                >
+                  <Check size={13} /> Keep
+                </button>
+                <button
+                  type="button"
+                  onClick={() => resolveHunk(hunkUI.id, false)}
+                  className="flex items-center gap-1 rounded-md bg-red-600 px-2 py-1 text-xs font-medium text-white hover:bg-red-700"
+                >
+                  <X size={13} /> Discard
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
