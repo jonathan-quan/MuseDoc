@@ -153,7 +153,47 @@ const initialMessages: ChatMessage[] = [
   },
 ];
 
+const MAX_TEXT_ATTACHMENT_BYTES = 1 * 1024 * 1024;
+const MAX_IMAGE_ATTACHMENT_BYTES = 4 * 1024 * 1024;
+const MAX_TOTAL_ATTACHMENT_BYTES = 6 * 1024 * 1024;
+
+function formatBytes(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function attachmentKind(file: File): Attachment["kind"] {
+  if (file.type.startsWith("image/")) return "image";
+  if (
+    file.type.startsWith("text/") ||
+    /\.(md|txt|json|csv|ts|tsx|js|jsx|css|html)$/i.test(file.name)
+  ) {
+    return "text";
+  }
+  return "unsupported";
+}
+
 function readFile(file: File): Promise<Attachment> {
+  const kind = attachmentKind(file);
+  const limit =
+    kind === "image" ? MAX_IMAGE_ATTACHMENT_BYTES : MAX_TEXT_ATTACHMENT_BYTES;
+  if (kind !== "unsupported" && file.size > limit) {
+    return Promise.reject(
+      new Error(`${file.name} is larger than ${formatBytes(limit)}.`)
+    );
+  }
+  if (kind === "unsupported") {
+    return Promise.resolve({
+      id: `${file.name}-${file.size}-${file.lastModified}`,
+      name: file.name,
+      type: file.type || "application/octet-stream",
+      size: file.size,
+      content: "",
+      kind,
+    });
+  }
+
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(new Error(`Could not read ${file.name}`));
@@ -165,16 +205,11 @@ function readFile(file: File): Promise<Attachment> {
         type: file.type || "application/octet-stream",
         size: file.size,
         content: result,
-        kind: file.type.startsWith("image/")
-          ? "image"
-          : file.type.startsWith("text/") ||
-            /\.(md|txt|json|csv|ts|tsx|js|jsx|css|html)$/i.test(file.name)
-          ? "text"
-          : "unsupported",
+        kind,
       });
     };
 
-    if (file.type.startsWith("image/")) reader.readAsDataURL(file);
+    if (kind === "image") reader.readAsDataURL(file);
     else reader.readAsText(file);
   });
 }
@@ -204,6 +239,10 @@ export default function DocumentWorkspace({
     targetRange: null as TextRange | null,
   });
   const [reviewing, setReviewing] = useState(false);
+  // HTML captured just before applying a non-diff action, so rejecting it can
+  // restore the document. Null while a diff-style edit (green/red marks) is the
+  // thing under review — those revert via the editor's diff handling instead.
+  const reviewSnapshotRef = useRef<string | null>(null);
   const [isSending, setIsSending] = useState(false);
   // Typewriter state: streams the latest assistant reply into its bubble word
   // by word (like ChatGPT) instead of showing it all at once. `index` is the
@@ -308,6 +347,7 @@ export default function DocumentWorkspace({
       if (!cancelled) setSaveState("saving");
     }, 0);
     const timer = window.setTimeout(async () => {
+      if (!cancelled) setSaveState("saving");
       try {
         const saved = await updateDocument(docId, {
           title: title.trim() || UNTITLED,
@@ -343,11 +383,10 @@ export default function DocumentWorkspace({
   // stored full content.
   useEffect(() => {
     if (!stream) return;
-    if (shown >= stream.words.length) {
-      const timer = window.setTimeout(() => setStream(null), 0);
-      return () => window.clearTimeout(timer);
-    }
-    const timer = window.setTimeout(() => setShown((n) => n + 1), 28);
+    const timer = window.setTimeout(() => {
+      if (shown >= stream.words.length) setStream(null);
+      else setShown((n) => n + 1);
+    }, shown >= stream.words.length ? 0 : 28);
     return () => window.clearTimeout(timer);
   }, [stream, shown]);
 
@@ -406,6 +445,15 @@ export default function DocumentWorkspace({
 
     try {
       const next = await Promise.all(files.map(readFile));
+      const currentSize = attachments.reduce((sum, file) => sum + file.size, 0);
+      const nextSize = next.reduce((sum, file) => sum + file.size, 0);
+      if (currentSize + nextSize > MAX_TOTAL_ATTACHMENT_BYTES) {
+        throw new Error(
+          `Attachments can total up to ${formatBytes(
+            MAX_TOTAL_ATTACHMENT_BYTES
+          )}.`
+        );
+      }
       setAttachments((prev) => [...prev, ...next]);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Could not read file.");
@@ -460,6 +508,7 @@ export default function DocumentWorkspace({
         requestType?: RequestType;
         message?: string;
         edit?: { find?: string; replace?: string };
+        documentEdit?: { replace?: string };
         actions?: AssistantEditorAction[];
         error?: string;
       };
@@ -469,31 +518,59 @@ export default function DocumentWorkspace({
         payload.requestType === "edit" &&
         typeof editFind === "string" &&
         editFind.length > 0;
+      const docReplace = payload.documentEdit?.replace;
+      const hasDocEdit =
+        payload.requestType === "edit" &&
+        typeof docReplace === "string" &&
+        docReplace.trim().length > 0;
       const actions =
         payload.requestType === "tool_action" ? payload.actions ?? [] : [];
       let diffShown = false;
-      let actionsApplied = false;
-      if (hasEdit && editFind) {
+      let docReplaced = false;
+      if (hasDocEdit && docReplace) {
+        // Whole-document edit: show an inline green/red diff across every
+        // paragraph when possible, otherwise apply the revision wholesale and
+        // review it via a snapshot restore.
+        diffShown = editorRef.current?.showDocumentDiff(docReplace) ?? false;
+        if (diffShown) {
+          reviewSnapshotRef.current = null;
+          setReviewing(true);
+        } else {
+          reviewSnapshotRef.current = editorRef.current?.snapshot() ?? null;
+          docReplaced = editorRef.current?.replaceDocument(docReplace) ?? false;
+          if (docReplaced) setReviewing(true);
+          else reviewSnapshotRef.current = null;
+        }
+      } else if (hasEdit && editFind) {
         diffShown =
           editorRef.current?.showDiff(editFind, payload.edit?.replace ?? "") ??
           false;
-        if (diffShown) setReviewing(true);
-      }
-      if (actions.length > 0 && !hasEdit) {
-        actionsApplied =
-          editorRef.current?.applyAssistantActions(actions) ?? false;
-        if (!actionsApplied) {
-          setStatus("I could not insert that into the document. Try again.");
+        if (diffShown) {
+          reviewSnapshotRef.current = null;
+          setReviewing(true);
         }
+      }
+      let actionsApplied = false;
+      if (actions.length > 0 && !hasEdit && !hasDocEdit) {
+        // Snapshot the document first so the action can be reverted on reject,
+        // then apply it and let the user accept or deny like an inline edit.
+        reviewSnapshotRef.current = editorRef.current?.snapshot() ?? null;
+        editorRef.current?.applyAssistantActions(actions);
+        actionsApplied = true;
+        setReviewing(true);
       }
       const replyContent = diffShown
         ? "I marked a suggested edit in the document — review the green/red changes there."
+        : docReplaced
+        ? payload.message ??
+          "I revised the whole document — accept or reject the changes."
+        : hasDocEdit
+        ? "I couldn't apply that document-wide edit. Try again, or select the section to change."
         : hasEdit
         ? "I couldn't find that exact text to edit. Try selecting it, then ask again."
-        : actions.length > 0 && !actionsApplied
-        ? "I could not insert that into the document. Try again."
-        : actions.length > 0
-        ? payload.message ?? "I used the editor tools for that."
+        : actionsApplied
+        ? payload.message ??
+          "I applied that to the document — accept or reject it to keep going."
         : payload.message ?? "";
       // The assistant reply lands right after the user message we appended.
       setMessages([
@@ -522,12 +599,23 @@ export default function DocumentWorkspace({
   }
 
   function acceptReview() {
-    editorRef.current?.acceptDiff();
+    // Snapshot present ⇒ an applied action: keeping it just means dropping the
+    // snapshot. Otherwise it's an inline diff: bake in the green/red changes.
+    if (reviewSnapshotRef.current !== null) {
+      reviewSnapshotRef.current = null;
+    } else {
+      editorRef.current?.acceptDiff();
+    }
     setReviewing(false);
   }
 
   function rejectReview() {
-    editorRef.current?.rejectDiff();
+    if (reviewSnapshotRef.current !== null) {
+      editorRef.current?.restore(reviewSnapshotRef.current);
+      reviewSnapshotRef.current = null;
+    } else {
+      editorRef.current?.rejectDiff();
+    }
     setReviewing(false);
   }
 
@@ -693,25 +781,32 @@ export default function DocumentWorkspace({
             // Guests aren't signed in (can't upload), and their scratchpad is
             // never saved — let those images inline. Real docs upload to storage.
             onUploadImage={guest ? undefined : uploadImage}
+            // Accepting/rejecting the last change one-by-one ends the review.
+            onDiffResolved={() => setReviewing(false)}
           />
           {reviewing && (
             <div className="absolute bottom-6 left-1/2 z-30 flex -translate-x-1/2 items-center gap-3 rounded-full border border-gray-200 bg-white px-4 py-2 shadow-lg dark:border-gray-700 dark:bg-gray-800">
-              <span className="text-sm text-gray-600 dark:text-gray-300">
-                Review the suggested edit
-              </span>
+              <div className="leading-tight">
+                <div className="whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">
+                  Review the edit
+                </div>
+                <div className="whitespace-nowrap text-xs text-gray-400 dark:text-gray-500">
+                  Hover a change to keep just that part
+                </div>
+              </div>
               <button
                 type="button"
                 onClick={rejectReview}
-                className="h-8 rounded-md border border-gray-300 bg-white px-3 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+                className="h-8 shrink-0 whitespace-nowrap rounded-md bg-red-600 px-3 text-sm font-medium text-white hover:bg-red-700"
               >
-                Reject
+                Reject all
               </button>
               <button
                 type="button"
                 onClick={acceptReview}
-                className="h-8 rounded-md bg-gray-900 px-3 text-sm font-medium text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white"
+                className="h-8 shrink-0 whitespace-nowrap rounded-md bg-green-600 px-3 text-sm font-medium text-white hover:bg-green-700"
               >
-                Accept
+                Accept all
               </button>
             </div>
           )}
