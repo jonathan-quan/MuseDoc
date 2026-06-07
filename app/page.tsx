@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import Logo from "./components/Logo";
 import {
   AlignLeft,
   ArrowRight,
@@ -9,7 +10,6 @@ import {
   Check,
   ChevronDown,
   Code2,
-  Feather,
   FileText,
   Highlighter,
   Image as ImageIcon,
@@ -56,7 +56,7 @@ export default function Landing() {
       {/* ── Top navigation ─────────────────────────────────── */}
       <header className="flex items-center gap-6 px-6 py-4 lg:px-10">
         <Link href="/" className="flex items-center gap-2">
-          <Feather size={22} className="text-gray-900 dark:text-gray-100" />
+          <Logo className="h-6 w-6" />
           <span className="text-xl font-semibold tracking-tight">MuseDoc</span>
         </Link>
         <div className="ml-auto flex items-center gap-3">
