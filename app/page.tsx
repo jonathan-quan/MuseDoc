@@ -55,9 +55,9 @@ export default function Landing() {
     <div className="min-h-full bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
       {/* ── Top navigation ─────────────────────────────────── */}
       <header className="flex items-center gap-6 px-6 py-4 lg:px-10">
-        <Link href="/" className="flex items-center gap-2">
-          <Logo className="h-6 w-6" />
-          <span className="text-xl font-semibold tracking-tight">MuseDoc</span>
+        <Link href="/" className="flex items-center gap-3">
+          <Logo className="h-14 w-auto" />
+          <span className="text-3xl font-bold tracking-tight">MuseDoc</span>
         </Link>
         <div className="ml-auto flex items-center gap-3">
           <button
