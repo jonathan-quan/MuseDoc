@@ -2,7 +2,8 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { Feather, X } from "lucide-react";
+import { X } from "lucide-react";
+import Logo from "./Logo";
 import { createClient } from "../lib/supabase/client";
 
 type Mode = "signin" | "signup";
@@ -75,7 +76,10 @@ export default function AuthDialog({
     setError(null);
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${location.origin}/auth/callback` },
+      options: {
+        redirectTo: `${location.origin}/auth/callback`,
+        queryParams: { prompt: "select_account" },
+      },
     });
     if (error) setError(error.message);
   }
@@ -102,7 +106,7 @@ export default function AuthDialog({
         </button>
 
         <div className="flex items-center justify-center gap-2">
-          <Feather size={20} className="text-gray-900 dark:text-gray-100" />
+          <Logo className="h-6 w-6" />
           <h1 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">
             MuseDoc
           </h1>
