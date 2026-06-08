@@ -11,7 +11,6 @@ import {
   ArrowLeft,
   Check,
   ChevronDown,
-  Feather,
   MessageSquare,
   Mic,
   Moon,
@@ -21,6 +20,7 @@ import {
   Sun,
   X,
 } from "lucide-react";
+import Logo from "./Logo";
 import { useRouter } from "next/navigation";
 import Editor, {
   type AssistantEditorAction,
@@ -704,7 +704,7 @@ export default function DocumentWorkspace({
           >
             <ArrowLeft size={18} />
           </button>
-          <Feather size={18} className="text-gray-900 dark:text-gray-100" />
+          <Logo className="h-5 w-5" />
           <span className="text-lg font-semibold tracking-tight text-gray-900 dark:text-gray-100">
             MuseDoc
           </span>
