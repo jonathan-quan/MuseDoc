@@ -6,6 +6,7 @@
 // on to the app.
 import { NextResponse } from "next/server";
 import { createClient } from "../../lib/supabase/server";
+import { rateLimit, clientIp, tooManyRequests } from "../../lib/rateLimit";
 
 // Only allow same-origin, absolute internal paths as the post-login
 // destination. Anything else (external URLs, protocol-relative "//evil.com",
@@ -16,6 +17,12 @@ function safeNext(value: string | null): string {
 }
 
 export async function GET(request: Request) {
+  // Throttle code-exchange attempts per IP (this endpoint is unauthenticated).
+  const limit = rateLimit(`auth-callback:${clientIp(request)}`, 30, 60_000);
+  if (!limit.ok) {
+    return tooManyRequests(limit.retryAfter, "Too many attempts. Please wait a moment.");
+  }
+
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
   const next = safeNext(searchParams.get("next"));

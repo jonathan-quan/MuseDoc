@@ -145,24 +145,39 @@ export async function storageUsageBytes(): Promise<number> {
 /** Storage bucket for editor images (see supabase/schema.sql). Public-read. */
 const IMAGE_BUCKET = "document-images";
 
+/** Raster image types we accept. SVG is deliberately excluded: it can carry
+ * scripts, and the bucket is public-read, so an SVG could be a stored-XSS
+ * vector. The map also fixes the stored extension from the (trusted) MIME type
+ * rather than the user-supplied filename. */
+const ALLOWED_IMAGE_TYPES: Record<string, string> = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/gif": "gif",
+  "image/webp": "webp",
+};
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+
 /**
  * Upload an image to Supabase Storage and return its public URL, so the editor
  * can reference it by URL instead of inlining a base64 data-URI into the
  * document HTML (which bloats rows and slows autosave). Files live under the
- * user's own folder, which RLS restricts writes to. Returns null on failure
- * (or when signed out) so the caller can fall back to inlining.
+ * user's own folder, which RLS restricts writes to. Returns null on failure,
+ * when signed out, or when the file isn't an allowed image type/size, so the
+ * caller can fall back to inlining.
  */
 export async function uploadImage(file: File): Promise<string | null> {
+  const ext = ALLOWED_IMAGE_TYPES[file.type];
+  if (!ext || file.size > MAX_IMAGE_BYTES) return null;
+
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return null;
 
-  const ext = file.name.split(".").pop()?.toLowerCase().replace(/[^a-z0-9]/g, "");
-  const path = `${user.id}/${crypto.randomUUID()}${ext ? `.${ext}` : ""}`;
+  const path = `${user.id}/${crypto.randomUUID()}.${ext}`;
   const { error } = await supabase.storage.from(IMAGE_BUCKET).upload(path, file, {
     cacheControl: "31536000",
-    contentType: file.type || undefined,
+    contentType: file.type,
   });
   if (error) return null;
 

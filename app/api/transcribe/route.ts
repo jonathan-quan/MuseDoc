@@ -5,11 +5,19 @@ import {
   recordSpend,
   usageMeteringConfigured,
 } from "../../lib/usage";
+import { rateLimit, tooManyRequests } from "../../lib/rateLimit";
+import { isSameOrigin, forbiddenCrossOrigin } from "../../lib/origin";
 
 type TranscriptionResponse = {
   text?: string;
   error?: { message?: string };
 };
+
+// A voice clip should never be this big; Whisper caps at 25 MB and short
+// dictation clips are far smaller.
+const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
+const RATE_LIMIT = 20;
+const RATE_WINDOW_MS = 60_000;
 
 export async function POST(request: Request) {
   const apiKey = process.env.OPENAI_API_KEY;
@@ -20,6 +28,14 @@ export async function POST(request: Request) {
     );
   }
 
+  // Reject cross-site requests (CSRF defense-in-depth).
+  if (!isSameOrigin(request)) return forbiddenCrossOrigin();
+
+  const declaredSize = Number(request.headers.get("content-length") ?? 0);
+  if (declaredSize > MAX_AUDIO_BYTES) {
+    return Response.json({ error: "Audio clip is too large." }, { status: 413 });
+  }
+
   // Transcription requires a signed-in account and counts against the cap.
   const supabase = await createClient();
   const {
@@ -28,6 +44,15 @@ export async function POST(request: Request) {
   if (!user) {
     return Response.json({ error: "Please sign in to use voice." }, { status: 401 });
   }
+
+  const limit = rateLimit(`transcribe:${user.id}`, RATE_LIMIT, RATE_WINDOW_MS);
+  if (!limit.ok) {
+    return tooManyRequests(
+      limit.retryAfter,
+      "You're sending requests too quickly. Please slow down."
+    );
+  }
+
   if (process.env.NODE_ENV === "production" && !usageMeteringConfigured()) {
     return Response.json(
       {
@@ -58,6 +83,10 @@ export async function POST(request: Request) {
   if (!(audio instanceof File)) {
     return Response.json({ error: "Audio file is required." }, { status: 400 });
   }
+  // Re-check the actual file size (content-length can be spoofed or chunked).
+  if (audio.size > MAX_AUDIO_BYTES) {
+    return Response.json({ error: "Audio clip is too large." }, { status: 413 });
+  }
 
   const openAIForm = new FormData();
   openAIForm.append("model", "whisper-1");
@@ -72,9 +101,10 @@ export async function POST(request: Request) {
 
   const payload = (await response.json()) as TranscriptionResponse;
   if (!response.ok) {
+    console.error("[transcribe] OpenAI request failed:", payload.error?.message);
     return Response.json(
-      { error: payload.error?.message ?? "Transcription failed." },
-      { status: response.status }
+      { error: "Transcription is unavailable right now. Please try again." },
+      { status: 502 }
     );
   }
 

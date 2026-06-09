@@ -24,6 +24,7 @@ import {
   formatTimestamp,
   type StoredDocument,
 } from "../lib/documents";
+import { sanitizeDocumentHtml } from "../lib/sanitize";
 import UserMenu from "./UserMenu";
 import Logo from "./Logo";
 
@@ -93,7 +94,7 @@ function DocPreview({ html }: { html: string }) {
       <div
         className="origin-top-left scale-[0.32] [&_*]:!text-gray-700 dark:[&_*]:!text-gray-300"
         style={{ width: "312%", padding: "24px 28px" }}
-        dangerouslySetInnerHTML={{ __html: html || "<p></p>" }}
+        dangerouslySetInnerHTML={{ __html: sanitizeDocumentHtml(html || "<p></p>") }}
       />
     </div>
   );

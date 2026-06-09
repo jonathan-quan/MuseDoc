@@ -6,26 +6,16 @@ import {
   recordSpend,
   usageMeteringConfigured,
 } from "../../lib/usage";
+import { rateLimit, tooManyRequests } from "../../lib/rateLimit";
+import { isSameOrigin, forbiddenCrossOrigin } from "../../lib/origin";
+import { validateChatBody, type Attachment } from "../../lib/chatValidation";
 
-type ChatMessage = { role: "user" | "assistant"; content: string };
-type Attachment = {
-  name: string;
-  type: string;
-  size: number;
-  content: string;
-  kind: "text" | "image" | "unsupported";
-};
-type ChatRequest = {
-  model: string;
-  messages: ChatMessage[];
-  document?: {
-    text?: string;
-    html?: string;
-    selectionText?: string;
-    currentBlockText?: string;
-  };
-  attachments?: Attachment[];
-};
+// Cap the raw request body before reading it (8 MB covers base64 image
+// attachments). Per-user request-rate cap (separate from the daily spend cap).
+const MAX_BODY_BYTES = 8 * 1024 * 1024;
+const RATE_LIMIT = 20;
+const RATE_WINDOW_MS = 60_000;
+
 type ResponseOutput = {
   type?: string;
   content?: Array<{ type?: string; text?: string }>;
@@ -61,13 +51,6 @@ type AssistantResult = {
   scope?: string | null;
   actions?: unknown[];
 };
-
-const allowedModels = new Set([
-  "gpt-5.4-mini",
-  "gpt-5.4",
-  "gpt-5.5",
-  "gpt-5.5-pro",
-]);
 
 function extractText(payload: OpenAIResponse) {
   if (payload.output_text) return payload.output_text;
@@ -405,6 +388,15 @@ export async function POST(request: Request) {
     );
   }
 
+  // Reject cross-site requests (CSRF defense-in-depth).
+  if (!isSameOrigin(request)) return forbiddenCrossOrigin();
+
+  // Reject oversized payloads up front (before reading the whole body).
+  const declaredSize = Number(request.headers.get("content-length") ?? 0);
+  if (declaredSize > MAX_BODY_BYTES) {
+    return Response.json({ error: "Request is too large." }, { status: 413 });
+  }
+
   // The assistant requires a signed-in account.
   const supabase = await createClient();
   const {
@@ -416,6 +408,16 @@ export async function POST(request: Request) {
       { status: 401 }
     );
   }
+
+  // Throttle request rate per user (separate from the daily spend cap).
+  const limit = rateLimit(`chat:${user.id}`, RATE_LIMIT, RATE_WINDOW_MS);
+  if (!limit.ok) {
+    return tooManyRequests(
+      limit.retryAfter,
+      "You're sending requests too quickly. Please slow down."
+    );
+  }
+
   if (process.env.NODE_ENV === "production" && !usageMeteringConfigured()) {
     return Response.json(
       {
@@ -446,10 +448,17 @@ export async function POST(request: Request) {
     );
   }
 
-  const body = (await request.json()) as ChatRequest;
-  if (!allowedModels.has(body.model)) {
-    return Response.json({ error: "Unsupported model." }, { status: 400 });
+  let rawBody: unknown;
+  try {
+    rawBody = await request.json();
+  } catch {
+    return Response.json({ error: "Invalid JSON body." }, { status: 400 });
   }
+  const validated = validateChatBody(rawBody);
+  if ("error" in validated) {
+    return Response.json({ error: validated.error }, { status: 400 });
+  }
+  const body = validated.body;
 
   const messages = body.messages.slice(-12);
   const attachments = body.attachments ?? [];
@@ -528,9 +537,11 @@ export async function POST(request: Request) {
 
   const payload = (await response.json()) as OpenAIResponse;
   if (!response.ok) {
+    // Log the provider's detail server-side, but don't leak it to the client.
+    console.error("[chat] OpenAI request failed:", payload.error?.message);
     return Response.json(
-      { error: payload.error?.message ?? "OpenAI request failed." },
-      { status: response.status }
+      { error: "The assistant is unavailable right now. Please try again." },
+      { status: 502 }
     );
   }
 
