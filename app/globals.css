@@ -33,6 +33,71 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  /* Editorial display/body serif (Newsreader) for the landing page. Maps the
+     `font-serif` utility onto the loaded webfont. */
+  --font-serif: var(--font-newsreader), ui-serif, Georgia, Cambria, serif;
+}
+
+/* ── Landing "paper" palette ──────────────────────────────────
+   A warm, newsprint-inspired theme scoped to the marketing landing. Every
+   surface reads a CSS variable, so the `.dark` overrides recolour the whole
+   page (and its theme-adaptive live demo) at once without `dark:` variants. */
+:root {
+  --paper: #f3efe6; /* page background */
+  --paper-2: #ece5d7; /* recessed panel (assistant column) */
+  --card: #faf7f0; /* raised surface (editor, cards) */
+  --ink: #1d1a14; /* primary text */
+  --ink-soft: #544f42; /* secondary text */
+  --ink-mute: #8c8472; /* mono labels / tertiary */
+  --line: #ddd5c3; /* hairline rules + borders */
+  --line-2: #cabfa6; /* stronger border (outline button) */
+  --accent: #a0392b; /* brick red — accents, classified labels */
+  --accent-2: #b8503f;
+  --on-accent: #f6f1e7; /* text on a red fill */
+  --hl-yellow: rgba(238, 210, 98, 0.55); /* marker highlight */
+  --hl-green: rgba(120, 168, 108, 0.3); /* diff insertion */
+  --hl-red: rgba(186, 80, 68, 0.2); /* diff deletion */
+  --dot: rgba(40, 32, 20, 0.06); /* background dot grid */
+}
+
+.dark {
+  --paper: #18150f;
+  --paper-2: #201c15;
+  --card: #221d16;
+  --ink: #ece4d4;
+  --ink-soft: #b3a890;
+  --ink-mute: #8c8270;
+  --line: #352f25;
+  --line-2: #463e2e;
+  --accent: #d9806f;
+  --accent-2: #e2917f;
+  --on-accent: #1a140f;
+  --hl-yellow: rgba(214, 184, 86, 0.28);
+  --hl-green: rgba(120, 168, 108, 0.26);
+  --hl-red: rgba(200, 96, 84, 0.24);
+  --dot: rgba(230, 220, 200, 0.06);
+}
+
+/* Faint dot grid behind the whole landing. */
+.dot-grid {
+  background-image: radial-gradient(var(--dot) 1px, transparent 1px);
+  background-size: 22px 22px;
+  background-position: -1px -1px;
+}
+
+/* Marker / diff highlights used in the hero and the live demo. */
+.mk-yellow {
+  background-image: linear-gradient(transparent 58%, var(--hl-yellow) 58%);
+}
+.mk-green {
+  background-color: var(--hl-green);
+  border-radius: 2px;
+  padding: 0 0.1em;
+}
+.mk-red {
+  background-color: var(--hl-red);
+  border-radius: 2px;
+  padding: 0 0.1em;
 }
 
 html,

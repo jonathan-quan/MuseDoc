@@ -2,32 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import Logo from "./components/Logo";
 import {
-  AlignLeft,
   ArrowRight,
-  Bold,
+  ArrowUp,
   Check,
-  ChevronDown,
-  Code2,
-  FileText,
-  Highlighter,
-  Image as ImageIcon,
-  Italic,
-  Link2,
-  List,
-  ListOrdered,
   Moon,
   MousePointer2,
-  Paperclip,
-  Plus,
-  Search,
-  SendHorizontal,
-  Subscript,
   Sun,
-  Superscript,
-  Table,
-  Underline,
   X,
 } from "lucide-react";
 import AuthDialog from "./components/AuthDialog";
@@ -38,6 +19,12 @@ type AuthMode = "signin" | "signup";
 // Public marketing landing page shown at "/". Signed-in visitors are sent
 // straight to /drive by the proxy, so this is only ever seen logged-out.
 // Logging in happens in a modal opened from here — there is no /login route.
+//
+// The whole page is an editorial "paper" layout: a warm dot-gridded
+// background, a Newsreader serif for display + the in-demo document, and Geist
+// Mono for the small-caps technical labels. Colours come from CSS variables
+// (see globals.css), so the theme toggle recolours everything — including the
+// theme-adaptive live demo — without per-element dark variants.
 export default function Landing() {
   const { theme, toggleTheme } = useTheme();
   const [authMode, setAuthMode] = useState<AuthMode | null>(null);
@@ -52,123 +39,149 @@ export default function Landing() {
   }, []);
 
   return (
-    <div className="min-h-full bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
-      {/* ── Top navigation ─────────────────────────────────── */}
-      <header className="flex items-center gap-6 px-6 py-4 lg:px-10">
-        <Link href="/" className="flex items-center gap-3">
-          <Logo className="h-14 w-auto" />
-          <span className="text-3xl font-bold tracking-tight">MuseDoc</span>
-        </Link>
-        <div className="ml-auto flex items-center gap-3">
-          <button
-            type="button"
-            role="switch"
-            aria-checked={theme === "dark"}
-            onClick={toggleTheme}
-            aria-label="Toggle dark mode"
-            className="flex size-9 items-center justify-center rounded-full text-gray-500 hover:bg-gray-200/70 dark:text-gray-400 dark:hover:bg-gray-800"
-          >
-            {theme === "dark" ? <Moon size={18} /> : <Sun size={18} />}
-          </button>
-          <button
-            type="button"
-            onClick={() => setAuthMode("signin")}
-            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
-          >
-            Log In
-          </button>
-          <button
-            type="button"
-            onClick={() => setAuthMode("signup")}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-          >
-            Create Account
-          </button>
+    <div className="dot-grid min-h-full bg-[var(--paper)] text-[var(--ink)]">
+      {/* ── Masthead ─────────────────────────────────────────── */}
+      <header className="border-b border-[var(--line)]">
+        <div className="mx-auto flex max-w-[1180px] items-center gap-8 px-6 py-5 lg:px-10">
+          <Link href="/" className="flex items-baseline gap-2">
+            <span className="font-serif text-[26px] leading-none font-semibold tracking-tight">
+              MuseDoc
+            </span>
+            <Mono className="text-[10px]">v.1</Mono>
+          </Link>
+
+          <nav className="ml-8 hidden items-center gap-7 text-[14px] text-[var(--ink-soft)] md:flex">
+            <a href="#inside" className="hover:text-[var(--ink)]">
+              The editor
+            </a>
+            <a href="#intents" className="hover:text-[var(--ink)]">
+              Intents
+            </a>
+            <a href="#inside" className="hover:text-[var(--ink)]">
+              Features
+            </a>
+            <a href="#intents" className="hover:text-[var(--ink)]">
+              Source
+            </a>
+          </nav>
+
+          <div className="ml-auto flex items-center gap-3">
+            <button
+              type="button"
+              role="switch"
+              aria-checked={theme === "dark"}
+              onClick={toggleTheme}
+              aria-label="Toggle dark mode"
+              className="flex size-9 items-center justify-center rounded-full text-[var(--ink-mute)] hover:bg-[var(--paper-2)] hover:text-[var(--ink)]"
+            >
+              {theme === "dark" ? <Moon size={17} /> : <Sun size={17} />}
+            </button>
+            <Link
+              href="/try"
+              className="group flex items-center gap-2 rounded-full bg-[var(--ink)] px-5 py-2.5 text-[14px] font-medium text-[var(--paper)]"
+            >
+              Open editor
+              <ArrowRight
+                size={15}
+                className="transition-transform group-hover:translate-x-0.5"
+              />
+            </Link>
+          </div>
         </div>
       </header>
 
-      <main className="px-6 pb-20 lg:px-10">
-        {/* ── Hero: copy on the left, live demo on the right ─── */}
-        <div className="mt-6 grid grid-cols-1 items-center gap-10 lg:mt-12 lg:grid-cols-[0.85fr_1.15fr] lg:gap-12">
-          {/* Copy + actions */}
-          <div className="min-w-0">
-            <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">
-              Write with an AI{" "}
-              <span className="text-gray-400 dark:text-gray-500">that edits</span>
-            </h1>
-            <p className="mt-5 max-w-xl text-lg text-gray-600 dark:text-gray-300">
-              MuseDoc is a full word processor where the agent drafts and revises
-              right in your document. Ask for changes, see them inline, and keep
-              only the ones you want.
+      <main className="mx-auto max-w-[1180px] px-6 lg:px-10">
+        {/* ── Hero ───────────────────────────────────────────── */}
+        <section className="py-14 lg:py-20">
+          <Mono className="text-[11px]">
+            — An AI-native document editor · Open source
+          </Mono>
+          <h1 className="mt-6 font-serif text-[clamp(2.6rem,6.4vw,5.2rem)] leading-[1.04] font-medium tracking-[-0.015em]">
+            Write with an{" "}
+            <span className="text-[var(--accent)] italic">assistant</span>
+            <br />
+            that can act on the <span className="mk-yellow">page</span>.
+          </h1>
+
+          <div className="mt-10 grid gap-10 lg:grid-cols-[1fr_360px] lg:items-end">
+            <p className="max-w-xl text-[15px] leading-[1.75] text-[var(--ink-soft)]">
+              MuseDoc puts a rich-text editor and a chat assistant side by side,
+              so the assistant can rewrite, summarize, insert tables, and apply
+              formatting <span className="italic">directly</span>. Every
+              destructive edit is routed through an accept/reject diff — you stay
+              the author of record.
             </p>
-            <div className="mt-8 flex flex-wrap items-center gap-3">
+
+            <div className="flex flex-col gap-3">
               <Link
                 href="/try"
-                className="rounded-lg bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700"
+                className="group flex items-center justify-between rounded-xl bg-[var(--ink)] px-5 py-4 text-[var(--paper)] transition-transform hover:-translate-y-0.5"
               >
-                Start writing
+                <span className="text-[15px] font-medium">Try out</span>
+                <span className="font-mono text-[12px] tracking-[0.16em] text-[var(--paper)] uppercase opacity-70 transition-transform group-hover:translate-x-0.5">
+                  /try →
+                </span>
               </Link>
-              <Link
-                href="/try?import=1"
-                className="rounded-lg border border-gray-300 bg-white px-5 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-100 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
+              <button
+                type="button"
+                onClick={() => setAuthMode("signup")}
+                className="rounded-xl border border-[var(--line-2)] px-5 py-4 text-[15px] font-medium hover:bg-[var(--paper-2)]"
               >
-                Import document
-              </Link>
+                Register
+              </button>
             </div>
-            <p className="mt-4 text-sm text-gray-400 dark:text-gray-500">
-              No setup — start writing in your browser.
-            </p>
           </div>
+        </section>
 
-          {/* Live product demo */}
-          <div className="min-w-0">
-            <HeroDemo />
+        {/* ── Live demo ──────────────────────────────────────── */}
+        <section id="inside" className="border-t border-[var(--line)] py-12 lg:py-16">
+          <div className="flex items-baseline justify-between">
+            <h2 className="font-serif text-[26px] font-medium tracking-tight">
+              Inside the page
+            </h2>
+            <Mono className="hidden text-[11px] sm:block">
+              Fig. 01 · Editor + Assistant
+            </Mono>
           </div>
-        </div>
-
-        {/* ── Feature sections ───────────────────────────────── */}
-        <section className="mt-16 lg:mt-24">
-          <h2 className="text-3xl font-semibold tracking-tight lg:text-4xl">
-            A smarter word processor
-          </h2>
-          <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-2">
-            <FeatureCard
-              tone="gray"
-              title="Everything a word processor needs"
-              desc="Headings, tables, images, lists, links, find-and-replace, and a live outline — the full editing toolkit, right in your browser."
-            >
-              <ToolbarVisual />
-            </FeatureCard>
-            <FeatureCard
-              tone="blue"
-              title="An AI agent that edits inline"
-              desc="Ask it to draft, rewrite, summarize, or reason about your document. Its changes appear in green and red — keep or discard them one at a time."
-            >
-              <DiffVisual />
-            </FeatureCard>
+          <div className="mt-7">
+            <InsideDemo />
           </div>
+        </section>
 
-          <h2 className="mt-16 text-3xl font-semibold tracking-tight lg:mt-24 lg:text-4xl">
-            Open it, edit it, export it
-          </h2>
-          <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-2">
-            <FeatureCard
-              tone="blue"
-              title="Import PDFs, Word, and more"
-              desc="Open a PDF, Word doc, Markdown, or HTML file and edit it right away — PDFs are rebuilt into clean, editable text."
-            >
-              <PdfVisual />
-            </FeatureCard>
-            <FeatureCard
-              tone="gray"
-              title="Export to any format"
-              desc="Download your work as PDF, Word, Markdown, HTML, or plain text — ready to share anywhere."
-            >
-              <FormatsVisual />
-            </FeatureCard>
+        {/* ── Intent classifier ──────────────────────────────── */}
+        <section
+          id="intents"
+          className="border-t border-[var(--line)] py-12 lg:py-20"
+        >
+          <div className="grid gap-12 lg:grid-cols-[0.9fr_1.1fr]">
+            <div>
+              <Mono className="text-[11px]">§ Five intents</Mono>
+              <h2 className="mt-5 font-serif text-[clamp(2rem,4.6vw,3.4rem)] leading-[1.05] font-medium tracking-[-0.01em]">
+                Every message is classified before it touches the page.
+              </h2>
+              <p className="mt-6 max-w-md text-[15px] leading-[1.75] text-[var(--ink-soft)]">
+                A small classifier decides whether the assistant should answer,
+                think, or edit — so nothing destructive happens behind your
+                back.
+              </p>
+            </div>
+
+            <div className="border-t border-[var(--line)]">
+              {INTENTS.map((it, i) => (
+                <IntentRow key={it.name} n={i + 1} {...it} />
+              ))}
+            </div>
           </div>
         </section>
       </main>
+
+      {/* ── Footer ───────────────────────────────────────────── */}
+      <footer className="border-t border-[var(--line)]">
+        <div className="mx-auto flex max-w-[1180px] items-center justify-between px-6 py-8 lg:px-10">
+          <span className="font-serif text-[18px] font-medium">MuseDoc</span>
+          <Mono className="text-[11px]">Open source · MMXXVI</Mono>
+        </div>
+      </footer>
 
       {authMode && (
         <AuthDialog initialMode={authMode} onClose={() => setAuthMode(null)} />
@@ -177,271 +190,134 @@ export default function Landing() {
   );
 }
 
-/** A large feature card: centered title + description with a UI visual that
- *  peeks up from the clipped bottom edge. Alternates a neutral and blue tone. */
-function FeatureCard({
-  tone,
-  title,
-  desc,
+/** Small-caps technical label set in the mono face, mirroring the mock's
+ *  `FIG. 01`, `CLASSIFIED AS …`, intent-code typography. */
+function Mono({
   children,
+  className = "",
 }: {
-  tone: "gray" | "blue";
-  title: string;
-  desc: string;
   children: React.ReactNode;
+  className?: string;
 }) {
-  const blue = tone === "blue";
   return (
-    <div
-      className={`group relative flex h-[420px] cursor-pointer flex-col items-center overflow-hidden rounded-2xl px-6 pt-10 ring-1 ring-transparent transition-all duration-300 hover:-translate-y-1.5 hover:shadow-2xl active:translate-y-0 active:scale-[0.99] hover:ring-black/5 dark:hover:ring-white/10 ${
-        blue
-          ? "bg-blue-50 dark:bg-blue-950/40"
-          : "bg-gray-100 dark:bg-gray-900"
-      }`}
+    <span
+      className={`font-mono uppercase tracking-[0.18em] text-[var(--ink-mute)] ${className}`}
     >
-      <h3
-        className={`text-center text-2xl font-semibold tracking-tight ${
-          blue
-            ? "text-blue-900 dark:text-blue-100"
-            : "text-gray-900 dark:text-gray-100"
-        }`}
-      >
-        {title}
-      </h3>
-      <p
-        className={`mx-auto mt-3 max-w-md text-center text-[15px] leading-relaxed ${
-          blue
-            ? "text-blue-900/70 dark:text-blue-200/70"
-            : "text-gray-500 dark:text-gray-400"
-        }`}
-      >
-        {desc}
-      </p>
-      <div className="mt-9 w-full transition-transform duration-300 ease-out group-hover:scale-[1.03]">
-        {children}
-      </div>
-    </div>
+      {children}
+    </span>
   );
 }
 
-/** Editor toolbar + a few formatted lines — the word-processor surface. */
-function ToolbarVisual() {
-  return (
-    <div className="mx-auto w-fit max-w-full overflow-hidden rounded-t-xl border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-800">
-      <MockToolbar />
-      <div className="px-5 py-4">
-        <div className="md-write h-3 w-1/2 rounded bg-gray-800 dark:bg-gray-200" />
-        <div className="mt-3 space-y-2">
-          {[96, 88, 92, 80, 84].map((w, i) => (
-            <div
-              key={i}
-              className="md-write h-1.5 rounded bg-gray-200 dark:bg-gray-700"
-              style={{ width: `${w}%`, animationDelay: `${(i + 1) * 0.18}s` }}
-            />
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/** A green/red inline edit with the per-change Keep/Discard control. */
-function DiffVisual() {
-  return (
-    <div className="mx-auto w-full max-w-md rounded-t-xl border border-gray-200 bg-white px-5 py-5 shadow-xl dark:border-gray-700 dark:bg-gray-800">
-      <p className="text-[13px] leading-[1.9] text-gray-700 dark:text-gray-300">
-        When the harbor bell began its low ringing, Mara{" "}
-        <del className={DEL_CLS}>was not</del>
-        <ins className={INS_CLS}>had</ins> stopped making threats and{" "}
-        <ins className={INS_CLS}>started keeping them</ins>.
-      </p>
-      <div className="mt-4 flex w-fit items-center gap-1 rounded-lg border border-gray-200 bg-white p-1 text-xs shadow-md dark:border-gray-700 dark:bg-gray-800">
-        <span className="md-press relative flex items-center gap-1 overflow-hidden rounded-md bg-green-600 px-2 py-1 font-medium text-white">
-          <Check size={12} /> Keep
-          <span className="md-ripple pointer-events-none absolute inset-0 bg-white/40" />
-        </span>
-        <span className="flex items-center gap-1 rounded-md bg-red-600 px-2 py-1 font-medium text-white">
-          <X size={12} /> Discard
-        </span>
-      </div>
-    </div>
-  );
-}
-
-/** The formats MuseDoc can export to. */
-function FormatsVisual() {
-  const formats = ["PDF", "Word", "Markdown", "HTML", "Text"];
-  return (
-    <div className="mx-auto flex max-w-sm flex-wrap items-center justify-center gap-2.5">
-      {formats.map((f, i) => (
-        <span
-          key={f}
-          style={{ animationDelay: `${i * 0.28}s` }}
-          className="md-lift flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
-        >
-          <FileText size={15} className="text-gray-400 dark:text-gray-500" />
-          {f}
-        </span>
-      ))}
-    </div>
-  );
-}
-
-/** PDF → editable document mockup. */
-function PdfVisual() {
-  return (
-    <div className="mx-auto flex max-w-sm items-center justify-center gap-4">
-      <div className="flex h-28 w-20 flex-col rounded-lg border border-gray-200 bg-white p-2 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-        <span className="mb-1.5 w-fit rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-600 dark:bg-red-950 dark:text-red-400">
-          PDF
-        </span>
-        <div className="space-y-1">
-          {[90, 80, 86, 70, 78].map((w, i) => (
-            <div
-              key={i}
-              className="h-1 rounded bg-gray-200 dark:bg-gray-700"
-              style={{ width: `${w}%` }}
-            />
-          ))}
-        </div>
-      </div>
-      <ArrowRight
-        size={20}
-        className="md-nudge shrink-0 text-gray-400 dark:text-gray-500"
-      />
-      <div className="flex h-28 w-24 flex-col rounded-lg border border-gray-200 bg-white p-2 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-        <div className="md-write mb-1.5 h-1.5 w-2/3 rounded bg-gray-800 dark:bg-gray-200" />
-        <div className="space-y-1">
-          {[95, 88, 92, 80, 84, 72].map((w, i) => (
-            <div
-              key={i}
-              className="md-write h-1 rounded bg-gray-200 dark:bg-gray-700"
-              style={{ width: `${w}%`, animationDelay: `${(i + 1) * 0.16}s` }}
-            />
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Scripted hero demo ────────────────────────────────────────────────
-// A non-interactive product demo that plays like a video but is built from
-// real DOM, so it always matches the current light/dark theme — including a
-// toggle flipped mid-loop, which a recorded video could never do. Three scenes:
-//   1. the assistant drafts a paragraph from a prompt;
-//   2. it adds a detail sentence (green insertion);
-//   3. it tightens the wording, and the reviewer keeps one change on its own
-//      (hover → "Keep") before accepting the rest — showcasing per-change review.
-// A fake cursor types each prompt, sends it, and clicks the controls.
-
-type Seg =
-  | { t: "eq"; s: string }
-  | { t: "fix"; del: string; ins: string }
-  | { t: "add"; s: string };
-
-const DOC_TITLE = "How Honeybees Communicate";
-
-// The paragraph the demo "writes". The draft (the `del` text) reads as clean
-// prose; each `fix` segment offers a tighter rewrite (ins) for scene 3, and
-// `add` is the sentence inserted in scene 2. `eq` text includes its own spacing.
-const PARA: Seg[] = [
-  { t: "eq", s: "Honeybees are small insects, but the way they communicate is " },
-  { t: "fix", del: "really rather", ins: "remarkably" },
-  { t: "eq", s: " complex. When a worker bee " },
-  { t: "fix", del: "comes across a good source of food", ins: "finds food" },
-  { t: "eq", s: ", she heads back to the hive and " },
-  { t: "fix", del: "shares the news with the rest of", ins: "alerts" },
-  { t: "eq", s: " the colony. She does this through a special movement " },
-  { t: "fix", del: "that scientists refer to as", ins: "called" },
-  { t: "eq", s: " the waggle dance." },
+// ── Intent classifier rows ───────────────────────────────────────────
+const INTENTS: { name: string; code: string; desc: string }[] = [
   {
-    t: "add",
-    s: " A single foraging bee may travel several kilometers from the hive to reach good flowers.",
+    name: "Answer",
+    code: "Q_AND_A",
+    desc: "Quick questions handled in the chat panel — your document stays untouched.",
   },
-  { t: "eq", s: " The angle of the dance " },
-  { t: "fix", del: "lets the other bees know which direction", ins: "shows which way" },
-  { t: "eq", s: " to fly, and its length " },
-  { t: "fix", del: "gives them a sense of", ins: "signals" },
-  { t: "eq", s: " how far the food is. Thanks to this " },
-  { t: "fix", del: "simple but surprisingly clever", ins: "elegant" },
   {
-    t: "eq",
-    s: " system, an entire hive can quickly learn where the best flowers are blooming.",
+    name: "Summarize",
+    code: "SUMMARIZE",
+    desc: "Distils the active document into a chat-side summary you can lift into the page.",
+  },
+  {
+    name: "Reason",
+    code: "REASON",
+    desc: "Critiques arguments, surfaces gaps, and reasons about what you've written.",
+  },
+  {
+    name: "Edit",
+    code: "EDIT",
+    desc: "Rewrites arrive as a word-level red/green diff. Accept, reject, or iterate.",
+  },
+  {
+    name: "Tool",
+    code: "TOOL_ACTION",
+    desc: "Inserts tables, images, and structure directly at the cursor — no markup required.",
   },
 ];
 
-// Stable hunk id per fix segment (by document order) and the one whose change is
-// kept on its own in scene 3 to demo per-change review. The showcase hunk is the
-// 5th fix, sitting mid-paragraph so its hover control has room above it.
-const HUNK_ID: Record<number, number> = {};
-let hunkCounter = 0;
-PARA.forEach((seg, i) => {
-  if (seg.t === "fix") {
-    hunkCounter += 1;
-    HUNK_ID[i] = hunkCounter;
-  }
-});
-const SHOWCASE_HUNK = 5;
+function IntentRow({
+  n,
+  name,
+  code,
+  desc,
+}: {
+  n: number;
+  name: string;
+  code: string;
+  desc: string;
+}) {
+  return (
+    <div className="grid grid-cols-[auto_1fr] items-start gap-x-6 gap-y-2 border-b border-[var(--line)] py-5 sm:grid-cols-[auto_minmax(0,9rem)_1.3fr]">
+      <Mono className="pt-1.5 text-[11px]">{String(n).padStart(2, "0")}</Mono>
+      <div>
+        <h3 className="font-serif text-[22px] leading-tight font-medium">
+          {name}
+        </h3>
+        <span className="font-mono text-[10px] tracking-[0.16em] text-[var(--accent)] uppercase">
+          {code}
+        </span>
+      </div>
+      <p className="col-span-2 text-[14px] leading-[1.6] text-[var(--ink-soft)] sm:col-span-1">
+        {desc}
+      </p>
+    </div>
+  );
+}
 
-// The clean draft the document fills with in scene 1 (no added sentence yet).
-const GEN_TEXT = PARA.filter((s) => s.t !== "add")
-  .map((s) => (s.t === "eq" ? s.s : s.del))
-  .join("");
+// ── Scripted live demo ────────────────────────────────────────────────
+// A non-interactive product demo that plays like a video but is built from
+// real DOM, so it always matches the active theme. Two scenes mirror the
+// mock's assistant transcript:
+//   1. EDIT — the assistant softens a sentence; the change lands as a
+//      red/green diff in the document, reviewed with Reject / Accept rewrite.
+//   2. TOOL_ACTION — the assistant inserts a 2×3 table at the cursor.
+// A fake cursor types each prompt, sends it, and clicks Accept.
 
-const P1 = "Write a short paragraph about how honeybees communicate.";
-const R1 = "Here's a short paragraph on how honeybees communicate.";
-const P2 = "Add a sentence about how far bees travel to find food.";
-const R2 = "Added a sentence — review the green change in the document.";
-const P3 = "Tighten the wording and make it more concise.";
-const R3 = "I tightened a few phrases — keep or discard each in the document.";
+const DOC_TITLE = "On the quiet ambition of small tools";
 
-// Timeline keyframes (ms). One full loop is `loop` long, then it resets.
-// Each click happens 1200ms after the cursor STARTS moving to that control,
-// which is longer than the ~1010ms glide, so the pointer has visibly arrived
-// before it presses. The "…Cursor"/"…TypeEnd"/"…HoverStart" times are when the
-// cursor begins traveling; the matching click time is that + 1200.
+// The second paragraph is the one the assistant rewrites. The original reads
+// like a lecture; the softened rewrite is the green insertion.
+const P2_OLD =
+  "But modern writing tools are loud and crowded with widgets, demanding constant attention.";
+const P2_NEW =
+  "MuseDoc keeps the page quiet and lets the assistant work in the margin.";
+
+const PROMPT_1 = "Soften the second sentence — make it sound less like a lecture.";
+const REPLY_1 = "Proposed a 1-paragraph rewrite. Review the diff in the document →";
+const PROMPT_2 = "Add a table comparing the two voices.";
+const REPLY_2 = "Inserting a 2×3 table at the cursor… done.";
+
+// Timeline keyframes (ms). One loop is `loop` long, then it resets. Each click
+// fires ~1100ms after the cursor STARTS toward a control, longer than the
+// ~1000ms glide, so the pointer has visibly arrived before it presses.
 const K = {
-  // Scene 1 — generate a paragraph.
+  // Scene 1 — soften → diff → accept.
   s1TypeStart: 600,
-  s1TypeEnd: 2500, // cursor heads to Send
-  s1SendAt: 3700, // = s1TypeEnd + 1200 (travel)
-  s1ReplyStart: 4400,
-  s1ReplyEnd: 5600,
-  genStart: 4800,
-  genEnd: 8200,
-  // Scene 2 — add a detail.
-  s2TypeStart: 9000,
-  s2TypeEnd: 10800, // cursor heads to Send
-  s2SendAt: 12000,
-  s2ReplyStart: 12700,
-  s2ReplyEnd: 13800,
-  s2InsertAt: 13100,
-  s2AcceptCursor: 14100, // cursor heads to Accept
-  s2AcceptAt: 15300,
-  // Scene 3 — tighten wording, keep one change on its own + accept the rest.
-  s3TypeStart: 16100,
-  s3TypeEnd: 17600, // cursor heads to Send
-  s3SendAt: 18800,
-  s3ReplyStart: 19500,
-  s3ReplyEnd: 20700,
-  s3DiffAt: 19900,
-  s3HoverStart: 20900, // cursor heads to the change's Keep control
-  s3KeepAt: 22100,
-  // Hold ~1s on the kept change before heading to Accept all.
-  s3AcceptCursor: 23100,
-  s3AcceptAllAt: 24300,
-  loop: 26300,
+  s1TypeEnd: 2800,
+  s1SendAt: 3900,
+  s1ReplyStart: 4500,
+  s1ReplyEnd: 5700,
+  s1DiffAt: 5000,
+  s1AcceptCursor: 6500,
+  s1AcceptAt: 7700,
+  // Scene 2 — insert a table.
+  s2TypeStart: 8900,
+  s2TypeEnd: 10500,
+  s2SendAt: 11600,
+  s2ReplyStart: 12200,
+  s2ReplyEnd: 13500,
+  s2TableAt: 12700,
+  loop: 16500,
 };
 
-// Fallback fake-cursor positions (percentages of the demo) used only until the
-// real buttons have been measured. The cursor always stays on screen.
-const SEND_POS = { left: "92%", top: "90%" };
-const ACCEPT_POS = { left: "33%", top: "88%" };
-const KEEP_POS = { left: "30%", top: "55%" };
-const REST_POS = { left: "30%", top: "48%" };
+// Fallback fake-cursor positions (percentages) used only until the real
+// buttons have been measured.
+const SEND_POS = { left: "90%", top: "88%" };
+const ACCEPT_POS = { left: "42%", top: "90%" };
 
-// Reveal `text` progressively across the window [start, end] for a typewriter.
+// Reveal `text` progressively across [start, end] for a typewriter effect.
 function typed(text: string, t: number, start: number, end: number) {
   if (t <= start) return "";
   if (t >= end) return text;
@@ -449,44 +325,27 @@ function typed(text: string, t: number, start: number, end: number) {
   return text.slice(0, n);
 }
 
-// Diff mark styling, matched to the real editor (see globals.css .diff-*).
-const INS_CLS =
-  "rounded-[2px] bg-green-500/15 px-0.5 text-green-700 no-underline dark:bg-green-500/20 dark:text-green-300";
-const DEL_CLS =
-  "rounded-[2px] bg-red-500/15 px-0.5 text-red-700 line-through dark:bg-red-500/20 dark:text-red-300";
-
 type DemoMessage = {
   role: "user" | "assistant";
   text: string;
-  label?: string;
+  intent?: string;
 };
 
-type CursorTarget = "rest" | "send" | "accept" | "keep";
+type CursorTarget = "rest" | "send" | "accept";
 
-/** Scripted, non-interactive hero demo. Theme-adaptive because it's real DOM. */
-function HeroDemo() {
+/** Scripted, non-interactive "Inside the page" demo. */
+function InsideDemo() {
   const [t, setT] = useState(0);
   const rootRef = useRef<HTMLDivElement>(null);
   const sendBtnRef = useRef<HTMLSpanElement>(null);
   const acceptBtnRef = useRef<HTMLButtonElement>(null);
-  const keepBtnRef = useRef<HTMLSpanElement>(null);
-  const editorColRef = useRef<HTMLDivElement>(null);
-  const hunkRef = useRef<HTMLSpanElement>(null);
   const playing = useRef(true);
-  // Measured button centers (relative to the demo) so the cursor lands on them.
   const [pos, setPos] = useState<{
     send: { x: number; y: number } | null;
     accept: { x: number; y: number } | null;
-    keep: { x: number; y: number } | null;
-  }>({ send: null, accept: null, keep: null });
-  // Measured, clamped position of the per-change Keep/Discard control so it
-  // always sits fully inside the editor (the showcase change can wrap to the
-  // right edge, where an inline-anchored control would be clipped).
-  const [hunkCtrl, setHunkCtrl] = useState<{ top: number; left: number } | null>(
-    null
-  );
+  }>({ send: null, accept: null });
 
-  // Only animate while the demo is on screen, to avoid burning CPU off-view.
+  // Only animate while on screen, to avoid burning CPU off-view.
   useEffect(() => {
     const el = rootRef.current;
     if (!el) return;
@@ -494,14 +353,14 @@ function HeroDemo() {
       ([entry]) => {
         playing.current = entry.isIntersecting;
       },
-      { threshold: 0.2 }
+      { threshold: 0.15 }
     );
     io.observe(el);
     return () => io.disconnect();
   }, []);
 
   // Single clock: accumulate elapsed time, wrap at `loop`, throttle to ~25fps,
-  // and re-measure the (possibly appearing/disappearing) buttons each tick.
+  // and re-measure the (appearing/disappearing) buttons each tick.
   useEffect(() => {
     let raf = 0;
     let prev = performance.now();
@@ -514,35 +373,15 @@ function HeroDemo() {
       const center = (node: Element | null) => {
         if (!node) return null;
         const b = node.getBoundingClientRect();
-        return { x: b.left - r.left + b.width / 2, y: b.top - r.top + b.height / 2 };
+        return {
+          x: b.left - r.left + b.width / 2,
+          y: b.top - r.top + b.height / 2,
+        };
       };
       setPos({
         send: center(sendBtnRef.current),
         accept: center(acceptBtnRef.current),
-        keep: center(keepBtnRef.current),
       });
-
-      // Place the Keep/Discard control just above the showcase change, clamped
-      // to stay within the editor column.
-      const col = editorColRef.current;
-      const hunkEl = hunkRef.current;
-      if (col && hunkEl) {
-        const cr = col.getBoundingClientRect();
-        const hr = hunkEl.getBoundingClientRect();
-        const W = 172;
-        const H = 34;
-        const GAP = 6;
-        const PAD = 10;
-        const left = Math.max(
-          PAD,
-          Math.min(hr.left - cr.left, cr.width - W - PAD)
-        );
-        const above = hr.top - cr.top - H - GAP;
-        const top = above < PAD ? hr.bottom - cr.top + GAP : above;
-        setHunkCtrl({ top, left });
-      } else {
-        setHunkCtrl(null);
-      }
     };
     const tick = (now: number) => {
       raf = requestAnimationFrame(tick);
@@ -560,72 +399,55 @@ function HeroDemo() {
     return () => cancelAnimationFrame(raf);
   }, []);
 
-  const near = (x: number) => Math.abs(t - x) < 160;
+  const near = (x: number) => Math.abs(t - x) < 150;
 
-  // The composer mirrors what is being typed, then clears on send.
+  // The composer mirrors what's being typed, then clears on send.
   const composerText =
     t >= K.s1TypeStart && t < K.s1SendAt
-      ? typed(P1, t, K.s1TypeStart, K.s1TypeEnd)
+      ? typed(PROMPT_1, t, K.s1TypeStart, K.s1TypeEnd)
       : t >= K.s2TypeStart && t < K.s2SendAt
-      ? typed(P2, t, K.s2TypeStart, K.s2TypeEnd)
-      : t >= K.s3TypeStart && t < K.s3SendAt
-      ? typed(P3, t, K.s3TypeStart, K.s3TypeEnd)
-      : "";
+        ? typed(PROMPT_2, t, K.s2TypeStart, K.s2TypeEnd)
+        : "";
 
-  // Chat bubbles appear only after a prompt is sent; replies stream in.
-  const messages: DemoMessage[] = [
-    {
-      role: "assistant",
-      text: "Hi! Ask about your document, or tell me what to draft or edit.",
-    },
-  ];
-  if (t >= K.s1SendAt) messages.push({ role: "user", text: P1 });
+  // Chat transcript builds up as prompts are sent; replies stream in.
+  const messages: DemoMessage[] = [];
+  if (t >= K.s1SendAt) messages.push({ role: "user", text: PROMPT_1 });
   if (t >= K.s1ReplyStart)
     messages.push({
       role: "assistant",
-      text: typed(R1, t, K.s1ReplyStart, K.s1ReplyEnd),
+      intent: "EDIT",
+      text: typed(REPLY_1, t, K.s1ReplyStart, K.s1ReplyEnd),
     });
-  if (t >= K.s2SendAt) messages.push({ role: "user", text: P2 });
+  if (t >= K.s2SendAt) messages.push({ role: "user", text: PROMPT_2 });
   if (t >= K.s2ReplyStart)
     messages.push({
       role: "assistant",
-      label: "Edit",
-      text: typed(R2, t, K.s2ReplyStart, K.s2ReplyEnd),
+      intent: "TOOL_ACTION",
+      text: typed(REPLY_2, t, K.s2ReplyStart, K.s2ReplyEnd),
     });
-  if (t >= K.s3SendAt) messages.push({ role: "user", text: P3 });
-  if (t >= K.s3ReplyStart)
-    messages.push({
-      role: "assistant",
-      label: "Edit",
-      text: typed(R3, t, K.s3ReplyStart, K.s3ReplyEnd),
-    });
+
   const thinking =
     (t >= K.s1SendAt && t < K.s1ReplyStart) ||
-    (t >= K.s2SendAt && t < K.s2ReplyStart) ||
-    (t >= K.s3SendAt && t < K.s3ReplyStart);
+    (t >= K.s2SendAt && t < K.s2ReplyStart);
 
-  // Bottom review pill: visible while an edit awaits accept/reject.
-  const reviewing =
-    (t >= K.s2InsertAt && t < K.s2AcceptAt) ||
-    (t >= K.s3DiffAt && t < K.s3AcceptAllAt);
-  const clickingAccept = near(K.s2AcceptAt) || near(K.s3AcceptAllAt);
-  const clickingSend = near(K.s1SendAt) || near(K.s2SendAt) || near(K.s3SendAt);
-  const clickingKeep = near(K.s3KeepAt);
+  // Header intent badge follows the current scene.
+  const intent = t >= K.s2TypeStart ? "TOOL_ACTION" : "EDIT";
 
-  // The per-change "Keep / Discard" control hovers over the showcase hunk.
-  const showHunkControl = t >= K.s3HoverStart && t < K.s3KeepAt + 200;
+  // Document states.
+  const reviewing = t >= K.s1DiffAt && t < K.s1AcceptAt;
+  const p2Accepted = t >= K.s1AcceptAt;
+  const tableVisible = t >= K.s2TableAt;
+
+  const clickingSend = near(K.s1SendAt) || near(K.s2SendAt);
+  const clickingAccept = near(K.s1AcceptAt);
 
   // Where the fake cursor points: it travels to a control for each beat and
-  // rests there until the next one. Beats are ordered in time.
-  const beats: { start: number; end: number; target: CursorTarget; click: boolean }[] =
-    [
-      { start: K.s1TypeEnd, end: K.s1SendAt + 250, target: "send", click: near(K.s1SendAt) },
-      { start: K.s2TypeEnd, end: K.s2SendAt + 250, target: "send", click: near(K.s2SendAt) },
-      { start: K.s2AcceptCursor, end: K.s2AcceptAt + 300, target: "accept", click: near(K.s2AcceptAt) },
-      { start: K.s3TypeEnd, end: K.s3SendAt + 250, target: "send", click: near(K.s3SendAt) },
-      { start: K.s3HoverStart, end: K.s3KeepAt + 150, target: "keep", click: near(K.s3KeepAt) },
-      { start: K.s3AcceptCursor, end: K.s3AcceptAllAt + 300, target: "accept", click: near(K.s3AcceptAllAt) },
-    ];
+  // rests there until the next one.
+  const beats: { start: number; end: number; target: CursorTarget }[] = [
+    { start: K.s1TypeEnd, end: K.s1SendAt + 250, target: "send" },
+    { start: K.s1AcceptCursor, end: K.s1AcceptAt + 300, target: "accept" },
+    { start: K.s2TypeEnd, end: K.s2SendAt + 250, target: "send" },
+  ];
   let target: CursorTarget = "rest";
   const active = beats.find((b) => t >= b.start && t <= b.end);
   if (active) {
@@ -635,294 +457,209 @@ function HeroDemo() {
     for (const b of beats) if (t >= b.start) lastStarted = b.target;
     target = lastStarted;
   }
-  const clicking = clickingSend || clickingAccept || clickingKeep;
+  const clicking = clickingSend || clickingAccept;
 
-  const p = pos;
   const px = (pt: { x: number; y: number }) => ({
     left: `${pt.x}px`,
     top: `${pt.y}px`,
   });
   const cursorStyle =
     target === "send"
-      ? p.send
-        ? px(p.send)
+      ? pos.send
+        ? px(pos.send)
         : SEND_POS
       : target === "accept"
-      ? p.accept
-        ? px(p.accept)
-        : ACCEPT_POS
-      : target === "keep"
-      ? p.keep
-        ? px(p.keep)
-        : KEEP_POS
-      : REST_POS;
-
-  // Render one paragraph segment for its current state.
-  const renderSeg = (seg: Seg, i: number) => {
-    if (seg.t === "eq") return <span key={i}>{seg.s}</span>;
-    if (seg.t === "add") {
-      if (t < K.s2InsertAt) return null;
-      return t < K.s2AcceptAt ? (
-        <ins key={i} className={INS_CLS}>
-          {seg.s}
-        </ins>
-      ) : (
-        <span key={i}>{seg.s}</span>
-      );
-    }
-    // fix
-    const id = HUNK_ID[i];
-    if (t < K.s3DiffAt) return <span key={i}>{seg.del}</span>;
-    const resolved =
-      t >= K.s3AcceptAllAt || (id === SHOWCASE_HUNK && t >= K.s3KeepAt);
-    if (resolved) return <span key={i}>{seg.ins}</span>;
-    const isShowcase = id === SHOWCASE_HUNK;
-    return (
-      <span key={i} ref={isShowcase ? hunkRef : undefined}>
-        <del className={DEL_CLS}>{seg.del}</del>
-        <ins className={INS_CLS}>{seg.ins}</ins>
-      </span>
-    );
-  };
+        ? pos.accept
+          ? px(pos.accept)
+          : ACCEPT_POS
+        : ACCEPT_POS;
 
   return (
     <div
       ref={rootRef}
       aria-label="MuseDoc product demo"
-      className="relative grid select-none grid-cols-1 gap-px overflow-hidden rounded-2xl border border-gray-200 bg-gray-200 shadow-sm lg:grid-cols-[1.6fr_1fr] dark:border-gray-800 dark:bg-gray-800"
+      className="relative grid select-none grid-cols-1 overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--card)] shadow-[0_1px_0_rgba(0,0,0,0.02)] lg:grid-cols-[1.55fr_1fr]"
     >
-      {/* Editor side */}
-      <div
-        ref={editorColRef}
-        className="relative flex min-h-0 min-w-0 flex-col bg-white lg:h-[460px] dark:bg-gray-900"
-      >
-        <MockToolbar />
-        <div className="min-h-[340px] flex-1 overflow-hidden px-6 py-6 lg:min-h-0">
-          {t < K.genStart ? (
-            <p className="text-[13px] text-gray-400 dark:text-gray-500">
-              Start writing…
-            </p>
-          ) : (
-            <>
-              <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-                {DOC_TITLE}
-              </h2>
-              <div className="mt-3 text-[13px] leading-[1.7] text-gray-700 dark:text-gray-300">
-                {t < K.genEnd ? (
-                  <p>
-                    {typed(GEN_TEXT, t, K.genStart, K.genEnd)}
-                    <span className="ml-0.5 inline-block h-3.5 w-px translate-y-0.5 animate-pulse bg-gray-500 align-middle dark:bg-gray-400" />
-                  </p>
-                ) : (
-                  <p>{PARA.map(renderSeg)}</p>
-                )}
-              </div>
-            </>
+      {/* ── Editor side ─────────────────────────────────────── */}
+      <div className="relative flex min-h-0 min-w-0 flex-col border-b border-[var(--line)] bg-[var(--card)] lg:h-[470px] lg:border-r lg:border-b-0">
+        {/* Editor chrome */}
+        <div className="flex items-center justify-between border-b border-[var(--line)] px-5 py-2.5">
+          <Mono className="text-[10px]">Untitled-draft.musedoc</Mono>
+          <div className="flex items-center gap-2 font-mono text-[11px] tracking-wide text-[var(--ink-mute)]">
+            <span className="font-medium">Aa</span>
+            <span>B</span>
+            <span className="italic">I</span>
+            <span className="underline">U</span>
+            <span className="text-[var(--line-2)]">·</span>
+            <span>H1</span>
+            <span>H2</span>
+            <span className="text-[var(--line-2)]">·</span>
+            <span>¶</span>
+          </div>
+        </div>
+
+        {/* Document */}
+        <div className="flex-1 overflow-hidden px-7 py-6 font-serif">
+          <h3 className="text-[23px] leading-tight font-semibold text-[var(--ink)]">
+            {DOC_TITLE}
+          </h3>
+          <p className="mt-3 text-[14.5px] leading-[1.72] text-[var(--ink-soft)]">
+            There is a kind of software that asks nothing of you — it sits at the
+            edge of your attention, waiting.{" "}
+            <span className="mk-yellow text-[var(--ink)]">
+              The best document tools
+            </span>{" "}
+            work this way: a page, a cursor, a margin wide enough to think in.
+          </p>
+          <p className="mt-2.5 text-[14.5px] leading-[1.72] text-[var(--ink-soft)]">
+            {reviewing ? (
+              <>
+                <span className="mk-red text-[var(--accent)] line-through">
+                  {P2_OLD}
+                </span>{" "}
+                <span className="mk-green text-[var(--ink)]">{P2_NEW}</span>
+              </>
+            ) : p2Accepted ? (
+              <span className="text-[var(--ink-soft)]">{P2_NEW}</span>
+            ) : (
+              <span>{P2_OLD}</span>
+            )}
+          </p>
+
+          {/* Inserted table (scene 2) */}
+          {tableVisible && (
+            <table className="mt-4 w-full border-collapse text-[13px] text-[var(--ink-soft)]">
+              <tbody>
+                <tr>
+                  <td className="border border-[var(--line)] px-3 py-1.5 font-medium text-[var(--ink)]">
+                    Voice
+                  </td>
+                  <td className="border border-[var(--line)] px-3 py-1.5 font-medium text-[var(--ink)]">
+                    Feels like
+                  </td>
+                </tr>
+                <tr>
+                  <td className="border border-[var(--line)] px-3 py-1.5">
+                    Loud tools
+                  </td>
+                  <td className="border border-[var(--line)] px-3 py-1.5">
+                    constant interruption
+                  </td>
+                </tr>
+                <tr>
+                  <td className="border border-[var(--line)] px-3 py-1.5">
+                    MuseDoc
+                  </td>
+                  <td className="border border-[var(--line)] px-3 py-1.5">
+                    a quiet margin
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           )}
         </div>
 
-        {/* Per-change Keep/Discard control, positioned above the showcase
-            change and clamped to stay inside the editor. */}
-        {showHunkControl && hunkCtrl && (
-          <div
-            className="pointer-events-none absolute z-30 flex items-center gap-1 whitespace-nowrap rounded-lg border border-gray-200 bg-white p-1 text-xs shadow-md dark:border-gray-700 dark:bg-gray-800"
-            style={{ top: hunkCtrl.top, left: hunkCtrl.left }}
-          >
-            <span
-              ref={keepBtnRef}
-              className={`flex items-center gap-1 rounded-md bg-green-600 px-2 py-1 font-medium text-white transition-transform ${
-                clickingKeep ? "scale-95 ring-2 ring-green-300" : ""
-              }`}
-            >
-              <Check size={12} /> Keep
-            </span>
-            <span className="flex items-center gap-1 rounded-md bg-red-600 px-2 py-1 font-medium text-white">
-              <X size={12} /> Discard
-            </span>
-          </div>
-        )}
-
-        {/* Review pill — always mounted (so Accept can be measured for the
-            cursor), shown only while an edit is under review. */}
+        {/* Review bar — always mounted (so Accept can be measured for the
+            cursor), shown only while the diff awaits a decision. */}
         <div
-          className={`absolute bottom-6 left-1/2 z-30 flex -translate-x-1/2 items-center gap-3 rounded-full border border-gray-200 bg-white px-4 py-2 shadow-lg transition-opacity duration-300 dark:border-gray-700 dark:bg-gray-800 ${
-            reviewing ? "opacity-100" : "opacity-0"
+          className={`flex items-center gap-2 border-t border-[var(--line)] px-7 py-3 transition-opacity duration-300 ${
+            reviewing ? "opacity-100" : "pointer-events-none opacity-0"
           }`}
         >
-          <div className="leading-tight">
-            <div className="whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">
-              Review the edit
-            </div>
-            <div className="whitespace-nowrap text-xs text-gray-400 dark:text-gray-500">
-              Hover a change to keep just that part
-            </div>
-          </div>
-          <button
-            type="button"
-            tabIndex={-1}
-            className="h-8 shrink-0 whitespace-nowrap rounded-md bg-red-600 px-3 text-sm font-medium text-white"
-          >
-            Reject all
-          </button>
+          <Mono className="mr-auto text-[10px]">1 change · review</Mono>
+          <span className="flex items-center gap-1.5 rounded-md border border-[var(--line-2)] px-3 py-1.5 text-[13px] font-medium text-[var(--ink-soft)]">
+            <X size={13} /> Reject
+          </span>
           <button
             ref={acceptBtnRef}
             type="button"
             tabIndex={-1}
-            className={`h-8 shrink-0 whitespace-nowrap rounded-md bg-green-600 px-3 text-sm font-medium text-white transition-transform ${
-              clickingAccept ? "scale-95 ring-2 ring-green-300" : ""
+            className={`flex items-center gap-1.5 rounded-md bg-[var(--accent)] px-3 py-1.5 text-[13px] font-medium text-[var(--on-accent)] transition-transform ${
+              clickingAccept ? "scale-95 ring-2 ring-[var(--accent-2)]" : ""
             }`}
           >
-            Accept all
+            <Check size={13} /> Accept rewrite
           </button>
         </div>
       </div>
 
-      {/* AI agent side */}
-      <div className="flex min-h-0 flex-col bg-gray-50 lg:h-[460px] dark:bg-gray-950">
-        <div className="shrink-0 border-b border-gray-200 px-4 py-3 text-sm font-semibold text-gray-900 dark:border-gray-800 dark:text-gray-100">
-          Assistant
+      {/* ── Assistant side ──────────────────────────────────── */}
+      <div className="flex min-h-0 flex-col bg-[var(--paper-2)] lg:h-[470px]">
+        <div className="flex shrink-0 items-center justify-between border-b border-[var(--line)] px-4 py-3">
+          <Mono className="text-[11px]">Assistant</Mono>
+          <Mono className="text-[10px]">GPT-5 · Intent: {intent}</Mono>
         </div>
-        <div className="flex min-h-0 flex-1 flex-col justify-end gap-3 overflow-hidden px-3 py-3">
-          {messages.map((m, i) => (
-            <div
-              key={i}
-              className={
-                m.role === "user"
-                  ? "flex justify-end"
-                  : "flex flex-col items-start gap-1"
-              }
-            >
-              {m.label && (
-                <span className="ml-1 rounded bg-gray-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:bg-gray-800 dark:text-gray-400">
-                  {m.label}
-                </span>
-              )}
-              <div
-                className={
-                  m.role === "user"
-                    ? "max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-sm bg-gray-900 px-3.5 py-2 text-sm text-white dark:bg-gray-200 dark:text-gray-900"
-                    : "max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-bl-sm bg-white px-3.5 py-2 text-sm text-gray-800 shadow-sm ring-1 ring-gray-200 dark:bg-gray-800 dark:text-gray-100 dark:ring-gray-700"
-                }
-              >
-                {m.text}
+
+        <div className="flex min-h-0 flex-1 flex-col justify-end gap-3 overflow-hidden px-4 py-4">
+          {messages.map((m, i) =>
+            m.role === "user" ? (
+              <div key={i}>
+                <Mono className="text-[10px]">You</Mono>
+                <p className="mt-1 text-[14px] leading-[1.5] text-[var(--ink)]">
+                  {m.text}
+                </p>
               </div>
-            </div>
-          ))}
+            ) : (
+              <div key={i}>
+                <div className="font-mono text-[10px] tracking-[0.16em] text-[var(--accent)] uppercase">
+                  MuseDoc · classified as{" "}
+                  <span className="italic">{m.intent}</span>
+                </div>
+                <div className="mt-1.5 rounded-lg border border-[var(--line)] bg-[var(--card)] px-3 py-2 text-[13.5px] leading-[1.5] text-[var(--ink-soft)]">
+                  {m.text}
+                </div>
+              </div>
+            )
+          )}
           {thinking && (
-            <div className="text-xs font-medium text-gray-400 dark:text-gray-500">
-              Thinking…
+            <div className="font-mono text-[11px] tracking-wide text-[var(--ink-mute)]">
+              classifying…
             </div>
           )}
         </div>
 
         {/* Composer — the prompt is typed here, then sent. */}
         <div className="shrink-0 p-3">
-          <div className="rounded-2xl border border-gray-300 bg-white px-3 py-2.5 dark:border-gray-700 dark:bg-gray-800">
-            <p className="min-h-[1.75rem] px-1 py-1 text-sm">
+          <div className="flex items-center gap-2 rounded-xl border border-[var(--line-2)] bg-[var(--card)] px-3 py-2">
+            <p className="min-h-[1.5rem] flex-1 py-0.5 text-[13.5px]">
               {composerText ? (
-                <span className="text-gray-800 dark:text-gray-100">
+                <span className="text-[var(--ink)]">
                   {composerText}
-                  <span className="ml-0.5 inline-block h-3.5 w-px translate-y-0.5 animate-pulse bg-gray-500 align-middle dark:bg-gray-400" />
+                  <span className="ml-0.5 inline-block h-3.5 w-px translate-y-0.5 animate-pulse bg-[var(--ink-mute)] align-middle" />
                 </span>
               ) : (
-                <span className="text-gray-400 dark:text-gray-500">
-                  Get help writing or brainstorming
+                <span className="text-[var(--ink-mute)]">
+                  Ask, or describe an edit
                 </span>
               )}
             </p>
-            <div className="mt-2 flex items-center gap-2 text-gray-400 dark:text-gray-500">
-              <span className="flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium">
-                GPT-5.5
-                <ChevronDown size={13} />
-              </span>
-              <Paperclip size={16} className="ml-auto" />
-              <span
-                ref={sendBtnRef}
-                className={`flex size-8 items-center justify-center rounded-full bg-blue-600 text-white transition-transform ${
-                  clickingSend ? "scale-90 ring-2 ring-blue-300" : ""
-                }`}
-              >
-                <SendHorizontal size={15} />
-              </span>
-            </div>
+            <span
+              ref={sendBtnRef}
+              className={`flex size-7 shrink-0 items-center justify-center rounded-lg bg-[var(--ink)] text-[var(--paper)] transition-transform ${
+                clickingSend ? "scale-90 ring-2 ring-[var(--accent-2)]" : ""
+              }`}
+            >
+              <ArrowUp size={15} />
+            </span>
           </div>
         </div>
       </div>
 
-      {/* Fake cursor overlaying the whole demo. Always visible; glides between
-          Send, the per-change Keep control, and Accept. The -3/-2px nudge puts
-          the pointer tip (not its box corner) on the measured target. */}
+      {/* Fake cursor overlaying the demo. Always visible; glides between Send
+          and Accept. The -3/-2px nudge puts the pointer tip on the target. */}
       <div
         aria-hidden
-        className="pointer-events-none absolute z-40 transition-all duration-[1010ms] ease-out"
+        className="pointer-events-none absolute z-40 transition-all duration-[1000ms] ease-out"
         style={{ ...cursorStyle, transform: "translate(-3px, -2px)" }}
       >
         <MousePointer2
-          size={26}
-          className="fill-gray-900 text-white drop-shadow dark:fill-white dark:text-gray-900"
+          size={24}
+          className="fill-[var(--ink)] text-[var(--paper)] drop-shadow"
         />
         {clicking && (
-          <span className="absolute left-0 top-0 -z-10 size-7 -translate-x-2.5 -translate-y-2.5 animate-ping rounded-full bg-gray-400/40" />
+          <span className="absolute top-0 left-0 -z-10 size-7 -translate-x-2.5 -translate-y-2.5 animate-ping rounded-full bg-[var(--ink-mute)]/40" />
         )}
       </div>
     </div>
-  );
-}
-
-/** Shared, theme-aware editor toolbar used by the demo. */
-function MockToolbar() {
-  return (
-    <div className="flex flex-col gap-2 border-b border-gray-200 px-4 py-3 dark:border-gray-800">
-      <div className="flex flex-wrap items-center gap-2 text-gray-500 dark:text-gray-400">
-        <MockPill label="Arial" />
-        <MockPill label="Normal" />
-        <div className="mx-1 h-5 w-px bg-gray-200 dark:bg-gray-700" />
-        <Link2 size={16} />
-        <Code2 size={16} />
-        <span className="text-sm italic">f(x)</span>
-        <Superscript size={16} />
-        <span className="text-sm font-medium">Aa</span>
-        <div className="mx-1 h-5 w-px bg-gray-200 dark:bg-gray-700" />
-        <MockTool icon={<Table size={16} />} label="Table" />
-        <MockTool icon={<ImageIcon size={16} />} label="Image" />
-        <MockTool icon={<Plus size={16} />} label="Insert" />
-        <MockTool icon={<Search size={16} />} label="Find" />
-      </div>
-      <div className="flex flex-wrap items-center gap-3 text-gray-500 dark:text-gray-400">
-        <Bold size={15} />
-        <Italic size={15} />
-        <Underline size={15} />
-        <MockPill label="Size" small />
-        <div className="mx-1 h-5 w-px bg-gray-200 dark:bg-gray-700" />
-        <AlignLeft size={15} />
-        <List size={15} />
-        <ListOrdered size={15} />
-        <Subscript size={15} />
-        <Superscript size={15} />
-        <Highlighter size={15} />
-      </div>
-    </div>
-  );
-}
-
-function MockPill({ label, small }: { label: string; small?: boolean }) {
-  return (
-    <span
-      className={`flex items-center gap-1 rounded border border-gray-200 px-2 py-1 ${
-        small ? "text-xs" : "text-sm"
-      } text-gray-600 dark:border-gray-700 dark:text-gray-300`}
-    >
-      {label}
-      <ChevronDown size={13} />
-    </span>
-  );
-}
-
-function MockTool({ icon, label }: { icon: React.ReactNode; label: string }) {
-  return (
-    <span className="flex flex-col items-center gap-0.5 text-[10px] font-medium">
-      {icon}
-      {label}
-    </span>
   );
 }
