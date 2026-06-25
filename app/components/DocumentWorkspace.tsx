@@ -136,14 +136,6 @@ function ModelPicker({
   );
 }
 
-const requestTypeLabels: Record<RequestType, string> = {
-  q_and_a: "Q&A",
-  edit: "Edit",
-  summarize: "Summary",
-  reason: "Reasoning",
-  tool_action: "Action",
-};
-
 const initialMessages: ChatMessage[] = [
   {
     role: "assistant",
@@ -783,28 +775,22 @@ export default function DocumentWorkspace({
             onDiffResolved={() => setReviewing(false)}
           />
           {reviewing && (
-            <div className="absolute bottom-6 left-1/2 z-30 flex -translate-x-1/2 items-center gap-3 rounded-full border border-gray-200 bg-white px-4 py-2 shadow-lg dark:border-gray-700 dark:bg-gray-800">
-              <div className="leading-tight">
-                <div className="whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">
-                  Review the edit
-                </div>
-                <div className="whitespace-nowrap text-xs text-gray-400 dark:text-gray-500">
-                  Hover a change to keep just that part
-                </div>
-              </div>
+            <div className="absolute bottom-6 left-1/2 z-30 flex -translate-x-1/2 items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--card)] px-2.5 py-2 shadow-lg">
               <button
                 type="button"
                 onClick={rejectReview}
-                className="h-8 shrink-0 whitespace-nowrap rounded-md bg-red-600 px-3 text-sm font-medium text-white hover:bg-red-700"
+                title="Reject all changes"
+                className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border border-[var(--line-2)] bg-[var(--card)] px-3 py-1.5 text-sm font-medium text-[var(--ink-soft)] hover:bg-[var(--paper-2)]"
               >
-                Reject all
+                <X size={14} /> Reject
               </button>
               <button
                 type="button"
                 onClick={acceptReview}
-                className="h-8 shrink-0 whitespace-nowrap rounded-md bg-green-600 px-3 text-sm font-medium text-white hover:bg-green-700"
+                title="Accept all changes"
+                className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[var(--on-accent)] hover:opacity-90"
               >
-                Accept all
+                <Check size={14} /> Accept rewrite
               </button>
             </div>
           )}
@@ -843,7 +829,7 @@ export default function DocumentWorkspace({
             </button>
           </div>
 
-          <div className="flex-1 space-y-4 overflow-y-auto p-4">
+          <div className="flex-1 space-y-5 overflow-y-auto p-4">
             {messages.map((m, i) => {
               // While a reply is streaming, show only the revealed words for
               // that message; everything else renders its full stored content.
@@ -851,37 +837,43 @@ export default function DocumentWorkspace({
               const text = streaming
                 ? stream.words.slice(0, shown).join("")
                 : m.content;
+              if (m.role === "user") {
+                return (
+                  <div key={`${m.role}-${i}`}>
+                    <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--ink-mute)]">
+                      You
+                    </span>
+                    <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-[var(--ink)]">
+                      {text}
+                    </p>
+                  </div>
+                );
+              }
               return (
-                <div
-                  key={`${m.role}-${i}`}
-                  className={
-                    m.role === "user"
-                      ? "flex justify-end"
-                      : "flex flex-col items-start gap-1"
-                  }
-                >
-                  {m.role === "assistant" && m.requestType && (
-                    <span className="ml-1 font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--accent)]">
-                      MuseDoc · {requestTypeLabels[m.requestType]}
+                <div key={`${m.role}-${i}`}>
+                  {m.requestType ? (
+                    <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--accent)]">
+                      MuseDoc · classified as{" "}
+                      <span className="italic">{m.requestType}</span>
+                    </span>
+                  ) : (
+                    <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--ink-mute)]">
+                      MuseDoc
                     </span>
                   )}
-                  <div
-                    className={
-                      m.role === "user"
-                        ? "max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-sm bg-gray-900 px-3.5 py-2 text-sm text-white dark:bg-gray-200 dark:text-gray-900"
-                        : "max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-bl-sm bg-white px-3.5 py-2 text-sm text-gray-800 shadow-sm ring-1 ring-gray-200 dark:bg-gray-800 dark:text-gray-100 dark:ring-gray-700"
-                    }
-                  >
+                  <div className="mt-1.5 whitespace-pre-wrap rounded-lg border border-[var(--line)] bg-[var(--card)] px-3.5 py-2.5 text-sm leading-relaxed text-[var(--ink-soft)]">
                     {text}
                     {streaming && (
-                      <span className="ml-0.5 inline-block h-3.5 w-1.5 translate-y-0.5 animate-pulse rounded-sm bg-gray-400 dark:bg-gray-500" />
+                      <span className="ml-0.5 inline-block h-3.5 w-1.5 translate-y-0.5 animate-pulse rounded-sm bg-[var(--ink-mute)]" />
                     )}
                   </div>
                 </div>
               );
             })}
             {isSending && !stream && (
-              <div className="text-xs font-medium text-gray-400 dark:text-gray-500">Thinking…</div>
+              <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-[var(--ink-mute)]">
+                Classifying…
+              </div>
             )}
           </div>
 
@@ -934,7 +926,7 @@ export default function DocumentWorkspace({
                   }
                 }}
                 rows={2}
-                placeholder="Ask the assistant..."
+                placeholder="Ask, or describe an edit…"
                 aria-label="Message the assistant"
                 className="max-h-32 min-h-12 w-full resize-none bg-transparent p-1 text-sm text-gray-800 outline-none placeholder:text-gray-400 dark:text-gray-100 dark:placeholder:text-gray-500"
               />
