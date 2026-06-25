@@ -57,7 +57,7 @@ export default function Landing() {
             <a href="#intents" className="hover:text-[var(--ink)]">
               Intents
             </a>
-            <a href="#inside" className="hover:text-[var(--ink)]">
+            <a href="#features" className="hover:text-[var(--ink)]">
               Features
             </a>
             <a href="#intents" className="hover:text-[var(--ink)]">
@@ -125,9 +125,12 @@ export default function Landing() {
               <button
                 type="button"
                 onClick={() => setAuthMode("signup")}
-                className="rounded-xl border border-[var(--line-2)] px-5 py-4 text-[15px] font-medium hover:bg-[var(--paper-2)]"
+                className="group flex items-center justify-between rounded-xl bg-[var(--ink)] px-5 py-4 text-[var(--paper)] transition-transform hover:-translate-y-0.5"
               >
-                Register
+                <span className="text-[15px] font-medium">Register</span>
+                <span className="font-mono text-[12px] tracking-[0.16em] text-[var(--paper)] uppercase opacity-70 transition-transform group-hover:translate-x-0.5">
+                  /auth →
+                </span>
               </button>
             </div>
           </div>
@@ -170,6 +173,53 @@ export default function Landing() {
               {INTENTS.map((it, i) => (
                 <IntentRow key={it.name} n={i + 1} {...it} />
               ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ── Capabilities ───────────────────────────────────── */}
+        <section
+          id="features"
+          className="border-t border-[var(--line)] py-12 lg:py-16"
+        >
+          <div className="flex items-baseline justify-between">
+            <h2 className="font-serif text-[26px] font-medium tracking-tight">
+              Everything in the box
+            </h2>
+            <Mono className="hidden text-[11px] sm:block">
+              Fig. 02 — Capabilities
+            </Mono>
+          </div>
+          <div className="mt-8 grid gap-x-12 gap-y-10 sm:grid-cols-2 lg:grid-cols-3">
+            {CAPABILITIES.map((col) => (
+              <CapabilityColumn key={col.group} {...col} />
+            ))}
+          </div>
+        </section>
+
+        {/* ── Colophon ───────────────────────────────────────── */}
+        <section className="pb-14 lg:pb-20">
+          <div className="rounded-2xl bg-[#181410] px-8 py-12 text-[#f1ede3] lg:px-14 lg:py-16 dark:border dark:border-[var(--line)]">
+            <Mono className="text-[11px] text-[#9a8f7c]">Colophon</Mono>
+            <blockquote className="mt-6 max-w-4xl font-serif text-[clamp(1.85rem,4vw,3rem)] leading-[1.12] font-medium tracking-[-0.01em]">
+              <span className="text-[#7f7666]">&ldquo;</span>The blank page is the
+              assistant&apos;s job too.{" "}
+              <span className="text-[#b3a890] italic">
+                Start somewhere — the diff is reversible.
+              </span>
+              <span className="text-[#7f7666]">&rdquo;</span>
+            </blockquote>
+            <div className="mt-10">
+              <Link
+                href="/try"
+                className="group inline-flex items-center gap-2 rounded-full bg-[#f1ede3] px-6 py-3 text-[15px] font-medium text-[#181410] transition-transform hover:-translate-y-0.5"
+              >
+                Open the editor
+                <ArrowRight
+                  size={16}
+                  className="transition-transform group-hover:translate-x-0.5"
+                />
+              </Link>
             </div>
           </div>
         </section>
@@ -262,6 +312,64 @@ function IntentRow({
       <p className="col-span-2 text-[14px] leading-[1.6] text-[var(--ink-soft)] sm:col-span-1">
         {desc}
       </p>
+    </div>
+  );
+}
+
+// ── Capabilities ledger ──────────────────────────────────────────────
+const CAPABILITIES: { group: string; items: string[] }[] = [
+  {
+    group: "Editor",
+    items: [
+      "Headings, fonts, colors, highlighting",
+      "Tables with grid-size picker",
+      "Images: crop, resize, rotate, opacity",
+      "Import PDF, DOCX, HTML, plain text",
+      "Find & replace · Outline sidebar",
+      "Voice dictation via Web Speech API",
+    ],
+  },
+  {
+    group: "Assistant",
+    items: [
+      "Resizable side-by-side chat panel",
+      "GPT-5.x model picker",
+      "Text & image attachments",
+      "Whisper voice input",
+      "Word-level diff review",
+      "Per-user daily AI spend cap",
+    ],
+  },
+  {
+    group: "Product",
+    items: [
+      "Public landing and guest /try scratchpad",
+      "Supabase Auth — email & Google",
+      "Drive-style document home",
+      "Star, trash, restore, rename",
+      "Per-document chat persistence",
+      "Light & dark theme",
+    ],
+  },
+];
+
+function CapabilityColumn({ group, items }: { group: string; items: string[] }) {
+  return (
+    <div>
+      <div className="font-mono text-[11px] tracking-[0.18em] text-[var(--accent)] uppercase">
+        {group}
+      </div>
+      <ul className="mt-3">
+        {items.map((it) => (
+          <li
+            key={it}
+            className="flex items-start gap-3 border-b border-dotted border-[var(--line-2)] py-3 text-[15px] text-[var(--ink-soft)]"
+          >
+            <span className="mt-[0.55rem] size-1.5 shrink-0 rounded-full bg-[var(--accent)]" />
+            <span>{it}</span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
