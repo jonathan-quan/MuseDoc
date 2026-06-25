@@ -20,7 +20,6 @@ import {
   Sun,
   X,
 } from "lucide-react";
-import Logo from "./Logo";
 import { useRouter } from "next/navigation";
 import Editor, {
   type AssistantEditorAction,
@@ -692,7 +691,7 @@ export default function DocumentWorkspace({
   }
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="paper-ui flex h-full flex-col bg-[var(--paper)] text-[var(--ink)]">
       <header className="flex shrink-0 items-center justify-between border-b border-gray-200 bg-white px-6 py-3 dark:border-gray-800 dark:bg-gray-900">
         <div className="flex items-center gap-2">
           <button
@@ -704,8 +703,7 @@ export default function DocumentWorkspace({
           >
             <ArrowLeft size={18} />
           </button>
-          <Logo className="h-5 w-5" />
-          <span className="text-lg font-semibold tracking-tight text-gray-900 dark:text-gray-100">
+          <span className="font-serif text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">
             MuseDoc
           </span>
           <input
@@ -831,7 +829,9 @@ export default function DocumentWorkspace({
           }`}
         >
           <div className="flex shrink-0 items-center justify-between gap-3 border-b border-gray-200 px-4 py-3 dark:border-gray-800">
-            <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">Assistant</span>
+            <span className="font-mono text-[11px] font-medium uppercase tracking-[0.16em] text-gray-500 dark:text-gray-400">
+              Assistant
+            </span>
             <button
               type="button"
               onClick={() => setChatOpen(false)}
@@ -861,8 +861,8 @@ export default function DocumentWorkspace({
                   }
                 >
                   {m.role === "assistant" && m.requestType && (
-                    <span className="ml-1 rounded bg-gray-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:bg-gray-800 dark:text-gray-400">
-                      {requestTypeLabels[m.requestType]}
+                    <span className="ml-1 font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--accent)]">
+                      MuseDoc · {requestTypeLabels[m.requestType]}
                     </span>
                   )}
                   <div

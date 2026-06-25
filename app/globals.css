@@ -85,6 +85,39 @@
   background-position: -1px -1px;
 }
 
+/* ── Editor "paper" reskin ────────────────────────────────────
+   The document editor + workspace are styled with Tailwind gray/blue/white
+   utilities and encode light/dark by swapping shades (e.g. `bg-gray-50
+   dark:bg-gray-900`). Rather than touch every class, remap those ramps to warm
+   "paper" tones on the `.paper-ui` wrapper. Because the ramp keeps its
+   direction (50 = lightest, 950 = darkest) the existing `dark:` variants still
+   pick the right end, so this recolours the whole editor in both themes.
+   Greens/reds (diff + accept/reject) are intentionally left untouched. */
+.paper-ui {
+  --color-white: #faf7f0; /* light surfaces: sheet, menus, inputs */
+  --color-gray-50: #f4f1e8;
+  --color-gray-100: #ece5d7;
+  --color-gray-200: #ddd5c3;
+  --color-gray-300: #cabfa6;
+  --color-gray-400: #ab9f86;
+  --color-gray-500: #8c8472;
+  --color-gray-600: #6f6857;
+  --color-gray-700: #544f42;
+  --color-gray-800: #36312a;
+  --color-gray-900: #221f18;
+  --color-gray-950: #18150f;
+  /* "Active"/accent (blue) utilities become a warm gold marker tone. */
+  --color-blue-50: #f1e9d4;
+  --color-blue-100: #e9dcb8;
+  --color-blue-200: #e0d3b0;
+  --color-blue-300: #e3d3a8;
+  --color-blue-400: #c9a86a;
+  --color-blue-500: #c9a86a;
+  --color-blue-600: #a8884a;
+  --color-blue-700: #1d1a14;
+  --color-blue-900: #1d1a14;
+}
+
 /* Marker / diff highlights used in the hero and the live demo. */
 .mk-yellow {
   background-image: linear-gradient(transparent 58%, var(--hl-yellow) 58%);

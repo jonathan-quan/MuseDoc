@@ -3086,8 +3086,8 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
       {/* ── Body: outline + writing surface ───────────────── */}
       <div className="flex min-h-0 flex-1">
         {showOutline && (
-          <nav className="w-56 shrink-0 overflow-y-auto border-r border-gray-100 bg-gray-50/60 px-3 py-4 dark:border-gray-800 dark:bg-gray-900/40">
-            <div className="mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
+          <nav className="w-56 shrink-0 overflow-y-auto border-r border-gray-200 bg-gray-50/60 px-3 py-4 dark:border-gray-800 dark:bg-gray-900/40">
+            <div className="mb-2 px-1 font-mono text-[11px] uppercase tracking-[0.16em] text-gray-500 dark:text-gray-400">
               Outline
             </div>
             {headings.length === 0 ? (
@@ -3122,7 +3122,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
 
         <div
           onScroll={showScrollbarBriefly}
-          className="slim-scroll flex-1 overflow-y-auto bg-gray-200 dark:bg-gray-950"
+          className="slim-scroll dot-grid flex-1 overflow-y-auto bg-[var(--paper)]"
         >
           <div
             ref={pageRef}
