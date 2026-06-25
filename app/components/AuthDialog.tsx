@@ -3,7 +3,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { X } from "lucide-react";
-import Logo from "./Logo";
 import { createClient } from "../lib/supabase/client";
 
 type Mode = "signin" | "signup";
@@ -94,31 +93,30 @@ export default function AuthDialog({
         aria-modal="true"
         aria-label={mode === "signin" ? "Sign in" : "Create an account"}
         onMouseDown={(e) => e.stopPropagation()}
-        className="relative w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-8 shadow-xl dark:border-gray-800 dark:bg-gray-900"
+        className="relative w-full max-w-sm rounded-2xl border border-[var(--line-2)] bg-[var(--card)] p-8 shadow-2xl"
       >
         <button
           type="button"
           onClick={onClose}
           aria-label="Close"
-          className="absolute right-3 top-3 flex size-8 items-center justify-center rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+          className="absolute right-3 top-3 flex size-8 items-center justify-center rounded-md text-[var(--ink-mute)] hover:bg-[var(--paper-2)] hover:text-[var(--ink)]"
         >
           <X size={16} />
         </button>
 
-        <div className="flex items-center justify-center gap-2">
-          <Logo className="h-6 w-6" />
-          <h1 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">
+        <div className="flex items-center justify-center">
+          <h1 className="font-serif text-2xl font-semibold tracking-tight text-[var(--ink)]">
             MuseDoc
           </h1>
         </div>
-        <p className="mt-1 text-center text-sm text-gray-500 dark:text-gray-400">
-          {mode === "signin" ? "Sign in to your account" : "Create an account"}
+        <p className="mt-2 text-center font-mono text-[11px] uppercase tracking-[0.16em] text-[var(--ink-mute)]">
+          {mode === "signin" ? "Sign in" : "Create an account"}
         </p>
 
         <button
           type="button"
           onClick={handleGoogle}
-          className="mt-6 flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+          className="mt-6 flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-[var(--line-2)] bg-[var(--paper)] text-sm font-medium text-[var(--ink-soft)] transition-colors hover:bg-[var(--paper-2)]"
         >
           <svg viewBox="0 0 24 24" width={16} height={16} aria-hidden>
             <path
@@ -142,9 +140,11 @@ export default function AuthDialog({
         </button>
 
         <div className="my-5 flex items-center gap-3">
-          <div className="h-px flex-1 bg-gray-200 dark:bg-gray-800" />
-          <span className="text-xs text-gray-400 dark:text-gray-500">or</span>
-          <div className="h-px flex-1 bg-gray-200 dark:bg-gray-800" />
+          <div className="h-px flex-1 bg-[var(--line)]" />
+          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-[var(--ink-mute)]">
+            or
+          </span>
+          <div className="h-px flex-1 bg-[var(--line)]" />
         </div>
 
         <form onSubmit={handleEmail} className="space-y-3">
@@ -156,7 +156,7 @@ export default function AuthDialog({
             onChange={(e) => setEmail(e.target.value)}
             placeholder="Email"
             autoComplete="email"
-            className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-900 outline-none focus:border-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 dark:focus:border-gray-600"
+            className="h-11 w-full rounded-xl border border-[var(--line-2)] bg-[var(--paper)] px-3.5 text-sm text-[var(--ink)] outline-none placeholder:text-[var(--ink-mute)] focus:border-[var(--ink-mute)]"
           />
           <input
             type="password"
@@ -167,11 +167,11 @@ export default function AuthDialog({
             onChange={(e) => setPassword(e.target.value)}
             placeholder="Password"
             autoComplete={mode === "signin" ? "current-password" : "new-password"}
-            className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-900 outline-none focus:border-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 dark:focus:border-gray-600"
+            className="h-11 w-full rounded-xl border border-[var(--line-2)] bg-[var(--paper)] px-3.5 text-sm text-[var(--ink)] outline-none placeholder:text-[var(--ink-mute)] focus:border-[var(--ink-mute)]"
           />
 
           {error && (
-            <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+            <p className="text-sm text-[var(--accent)]">{error}</p>
           )}
           {info && (
             <p className="text-sm text-green-700 dark:text-green-400">{info}</p>
@@ -180,7 +180,7 @@ export default function AuthDialog({
           <button
             type="submit"
             disabled={busy}
-            className="h-10 w-full rounded-lg bg-gray-900 text-sm font-medium text-white transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white"
+            className="h-11 w-full rounded-xl bg-[var(--ink)] text-sm font-medium text-[var(--paper)] transition-transform hover:-translate-y-0.5 disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {busy
               ? "Please wait…"
@@ -190,7 +190,7 @@ export default function AuthDialog({
           </button>
         </form>
 
-        <p className="mt-5 text-center text-sm text-gray-500 dark:text-gray-400">
+        <p className="mt-5 text-center text-sm text-[var(--ink-soft)]">
           {mode === "signin" ? "No account yet?" : "Already have an account?"}{" "}
           <button
             type="button"
@@ -199,7 +199,7 @@ export default function AuthDialog({
               setError(null);
               setInfo(null);
             }}
-            className="font-medium text-gray-900 underline-offset-2 hover:underline dark:text-gray-100"
+            className="font-medium text-[var(--ink)] underline-offset-2 hover:underline"
           >
             {mode === "signin" ? "Sign up" : "Sign in"}
           </button>
