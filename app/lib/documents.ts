@@ -10,6 +10,10 @@
 // getHTML) plus a plain-text snapshot used for Drive previews and search.
 import { createClient } from "./supabase/client";
 
+// Display formatters live in a dependency-free module so they're unit-testable;
+// re-exported here to keep existing `from "../lib/documents"` imports working.
+export { formatBytes, formatTimestamp } from "./format";
+
 const supabase = createClient();
 
 export type StoredDocument = {
@@ -169,12 +173,6 @@ export async function uploadImage(file: File): Promise<string | null> {
   return supabase.storage.from(IMAGE_BUCKET).getPublicUrl(path).data.publicUrl || null;
 }
 
-export function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
 // ── Per-document chat history ──────────────────────────────────────────────
 // Stored in its own table (keyed by document id) so a conversation survives
 // navigating away and back, without bloating the document's autosave path.
@@ -213,25 +211,4 @@ export async function saveChat(
 
 export async function deleteChat(id: string): Promise<void> {
   await supabase.from("document_chats").delete().eq("document_id", id);
-}
-
-/** Human-friendly "opened" label like Drive ("May 25", "2:14 PM", "Yesterday"). */
-export function formatTimestamp(ts: number): string {
-  const date = new Date(ts);
-  const now = new Date();
-  const sameDay = date.toDateString() === now.toDateString();
-  if (sameDay) {
-    return date.toLocaleTimeString(undefined, {
-      hour: "numeric",
-      minute: "2-digit",
-    });
-  }
-  const yesterday = new Date(now);
-  yesterday.setDate(now.getDate() - 1);
-  if (date.toDateString() === yesterday.toDateString()) return "Yesterday";
-  return date.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    ...(date.getFullYear() === now.getFullYear() ? {} : { year: "numeric" }),
-  });
 }

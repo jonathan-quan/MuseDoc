@@ -80,6 +80,10 @@ import {
 import { Frame } from "../extensions/Frame";
 import { SearchReplace } from "../extensions/SearchReplace";
 import { DiffInsert, DiffDelete } from "../extensions/DiffMarks";
+// Pure helpers extracted into dependency-free modules so they can be unit-tested.
+import { diffSegments } from "../lib/diff";
+import { editorMarkdown, type PMNode } from "../lib/markdown";
+import { textToEditorContent } from "../lib/text-blocks";
 
 type ImageFit = "contain" | "cover" | "fill";
 type ImageAlign = "left" | "center" | "right";
@@ -659,53 +663,6 @@ function TableGridPicker({
   );
 }
 
-type DiffSegment = { type: "equal" | "delete" | "insert"; text: string };
-
-function tokenizeForDiff(text: string): string[] {
-  return text.match(/\s+|[^\s]+/g) ?? [];
-}
-
-/** Word-level diff of two strings, with adjacent same-type tokens merged. */
-function diffSegments(original: string, next: string): DiffSegment[] {
-  const a = tokenizeForDiff(original);
-  const b = tokenizeForDiff(next);
-  const dp = Array.from({ length: a.length + 1 }, () =>
-    Array<number>(b.length + 1).fill(0)
-  );
-  for (let i = a.length - 1; i >= 0; i -= 1) {
-    for (let j = b.length - 1; j >= 0; j -= 1) {
-      dp[i][j] =
-        a[i] === b[j]
-          ? dp[i + 1][j + 1] + 1
-          : Math.max(dp[i + 1][j], dp[i][j + 1]);
-    }
-  }
-  const parts: DiffSegment[] = [];
-  const push = (type: DiffSegment["type"], text: string) => {
-    const last = parts[parts.length - 1];
-    if (last && last.type === type) last.text += text;
-    else parts.push({ type, text });
-  };
-  let i = 0;
-  let j = 0;
-  while (i < a.length && j < b.length) {
-    if (a[i] === b[j]) {
-      push("equal", a[i]);
-      i += 1;
-      j += 1;
-    } else if (dp[i + 1][j] >= dp[i][j + 1]) {
-      push("delete", a[i]);
-      i += 1;
-    } else {
-      push("insert", b[j]);
-      j += 1;
-    }
-  }
-  while (i < a.length) push("delete", a[i++]);
-  while (j < b.length) push("insert", b[j++]);
-  return parts;
-}
-
 // Build the inline nodes for a word-level diff between two strings, marking
 // deletions red and insertions green and tagging each contiguous change with a
 // `hunk` id (so it can later be kept/discarded on its own). Hard breaks in the
@@ -831,72 +788,6 @@ type EditorProps = {
   onDiffResolved?: () => void;
 };
 
-type InlineContent = { type: "text"; text: string } | { type: "hardBreak" };
-type TextBlockContent =
-  | {
-      type: "paragraph";
-      content?: InlineContent[];
-    }
-  | {
-      type: "heading";
-      attrs: { level: 1 | 2 | 3 };
-      content?: InlineContent[];
-    };
-
-function linesToInlineContent(lines: string[]) {
-  const content = lines.flatMap((line, index) => {
-    const nodes: InlineContent[] = [];
-    if (index > 0) nodes.push({ type: "hardBreak" });
-    if (line) nodes.push({ type: "text", text: line });
-    return nodes;
-  });
-
-  return content.length > 0 ? content : undefined;
-}
-
-function textToEditorContent(text: string) {
-  const blocks: TextBlockContent[] = [];
-  let paragraphLines: string[] = [];
-
-  function flushParagraph() {
-    if (!paragraphLines.some((line) => line.trim())) {
-      paragraphLines = [];
-      return;
-    }
-
-    blocks.push({
-      type: "paragraph",
-      content: linesToInlineContent(paragraphLines),
-    });
-    paragraphLines = [];
-  }
-
-  for (const rawLine of text.trim().split(/\r?\n/)) {
-    const line = rawLine.trimEnd();
-    const headingMatch = /^(#{1,3})\s+(.+)$/.exec(line.trim());
-
-    if (headingMatch) {
-      flushParagraph();
-      blocks.push({
-        type: "heading",
-        attrs: { level: headingMatch[1].length as 1 | 2 | 3 },
-        content: linesToInlineContent([headingMatch[2].trim()]),
-      });
-      continue;
-    }
-
-    if (!line.trim()) {
-      flushParagraph();
-      continue;
-    }
-
-    paragraphLines.push(line);
-  }
-
-  flushParagraph();
-  return blocks;
-}
-
 // Prose styling for exported / printed documents. Mirrors the `.editor-content`
 // rules in globals.css (light theme) so a Print or HTML export looks the same
 // as the editor — including borderless two-column "layout tables" and the
@@ -934,99 +825,6 @@ const EXPORT_STYLES = `
 
 function buildExportDocument(title: string, bodyHtml: string) {
   return `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><style>${EXPORT_STYLES}</style></head><body>${bodyHtml}</body></html>`;
-}
-
-// ── Markdown export ──────────────────────────────────────────
-// Serialize the editor's ProseMirror JSON to Markdown.
-type PMNode = {
-  type: string;
-  attrs?: Record<string, unknown>;
-  content?: PMNode[];
-  text?: string;
-  marks?: { type: string; attrs?: Record<string, unknown> }[];
-};
-
-function inlineToMarkdown(nodes: PMNode[] = []): string {
-  return nodes
-    .map((node) => {
-      if (node.type === "hardBreak") return "  \n";
-      if (node.type !== "text") return inlineToMarkdown(node.content);
-      let text = node.text ?? "";
-      const marks = node.marks ?? [];
-      const has = (type: string) => marks.some((mark) => mark.type === type);
-      if (has("code")) text = "`" + text + "`";
-      if (has("bold")) text = `**${text}**`;
-      if (has("italic")) text = `*${text}*`;
-      const link = marks.find((mark) => mark.type === "link");
-      if (link?.attrs?.href) text = `[${text}](${String(link.attrs.href)})`;
-      return text;
-    })
-    .join("");
-}
-
-function blocksToMarkdown(nodes: PMNode[] = [], depth = 0): string {
-  const out: string[] = [];
-  for (const node of nodes) {
-    switch (node.type) {
-      case "heading":
-        out.push(
-          "#".repeat(Number(node.attrs?.level ?? 1)) +
-            " " +
-            inlineToMarkdown(node.content)
-        );
-        break;
-      case "paragraph":
-        out.push(inlineToMarkdown(node.content));
-        break;
-      case "bulletList":
-      case "orderedList": {
-        const ordered = node.type === "orderedList";
-        const indent = "  ".repeat(depth);
-        (node.content ?? []).forEach((item, index) => {
-          const marker = ordered ? `${index + 1}.` : "-";
-          const inner = blocksToMarkdown(item.content, depth + 1).trim();
-          const lines = inner.split("\n");
-          out.push(`${indent}${marker} ${lines.join(`\n${indent}  `)}`);
-        });
-        break;
-      }
-      case "blockquote":
-        out.push(
-          blocksToMarkdown(node.content)
-            .split("\n")
-            .map((line) => `> ${line}`)
-            .join("\n")
-        );
-        break;
-      case "horizontalRule":
-        out.push("---");
-        break;
-      case "table": {
-        const rows = (node.content ?? []).map((row) =>
-          (row.content ?? []).map((cell) =>
-            blocksToMarkdown(cell.content).replace(/\s*\n\s*/g, " ").trim()
-          )
-        );
-        if (rows.length) {
-          const cols = rows[0].length;
-          out.push(`| ${rows[0].join(" | ")} |`);
-          out.push(`| ${Array(cols).fill("---").join(" | ")} |`);
-          for (const row of rows.slice(1)) out.push(`| ${row.join(" | ")} |`);
-        }
-        break;
-      }
-      case "image":
-        if (node.attrs?.src) out.push(`![](${String(node.attrs.src)})`);
-        break;
-      default:
-        if (node.content) out.push(blocksToMarkdown(node.content, depth));
-    }
-  }
-  return out.join("\n\n");
-}
-
-function editorMarkdown(doc: PMNode): string {
-  return `${blocksToMarkdown(doc.content).trim()}\n`;
 }
 
 function tableContent(rows: string[][]) {
